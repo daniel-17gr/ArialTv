@@ -10,21 +10,22 @@ Developed by **Auris Daniel** ([@daniel-17gr](https://github.com/daniel-17gr)).
 
 - **10-Foot Android TV Experience**: Built with Jetpack Compose, Material 3 for TV (`androidx.tv:tv-material`), and collapsible YouTube TV–style left rail navigation.
 - **Nothing OS × YouTube TV Design**:
+  - Rhythmic Nothing OS dot-matrix launch splash screen with version & developer footer.
   - `Doto` dot-matrix display accents paired with `Plus Jakarta Sans`.
   - Unmistakable 3-state focus hierarchy (unfocused matte dark, active Signal Red outline, pure white + Signal Red focus ring).
+  - Edge-to-edge poster rails with soft edge fades (zero trimmed padding) and content-type badges (`MOVIE`, `SERIES`, `DOC`, `MUSIC`).
   - Subtle banner-backed top app bar with smooth fade into `#0A0A0A` canvas.
-  - Content-type badges on every poster (`MOVIE`, `SERIES`, `DOC`, `MUSIC`).
-- **Live Catalog Filters & Search**:
+- **Live Catalog Filters & Voice Search**:
   - Filter Home, Films, and Series live by Genre, Year, and Sort (`Trending`, `Latest`, `2026`, `2025`).
-  - Instant live search suggestions while typing, persisted Search History with 1-click clear, `All / Films / Series` search filter pills, and live API Trending Now discovery.
+  - TV remote Voice Search mic button, instant live search suggestions while typing, persisted Search History with 1-click clear, `All / Films / Series` filter pills, and live API Trending Now discovery.
 - **Cinema Player (Media3 ExoPlayer + Jellyfin FFmpeg)**:
   - Bundled `org.jellyfin.media3:media3-ffmpeg-decoder` for broad audio codec support (AC3, E-AC3, DTS, TrueHD, FLAC, Vorbis, Opus, etc.).
   - Automatic software video decoder failover + automatic stream/H.264 failover on playback errors, plus a fully remote-focusable recovery dialog.
   - In-player **Volume Control** drawer (`-10%`, `+10%`, `Mute`, quick presets) + vertical swipe brightness/volume gestures & double-tap ±10s seek.
-  - Live **Subtitle Styling** (Size, Color, Background, Position) and track switcher.
-  - In-player **Episodes & Seasons** drawer with per-episode progress and 10-second Up Next autoplay.
+  - Live **Subtitle Styling** (Size, Color, Background, Position) + **Sync Offset** (`-0.5s` / `Reset` / `+0.5s`).
+  - In-player **Episodes & Seasons** drawer, floating **Next Episode** pill in the final 45s, and 10-second Up Next autoplay.
   - **Sleep Timer** (`Off`, `15m`, `30m`, `45m`, `1h`, `1h 30m`, `2h`, `3h`, `4h`), Speed (`0.5x–2.0x`), Quality & Decoder Mode, and Aspect Ratio (`Fit / Zoom / Stretch`).
-- **TV Remote Quick Menu**: Press the remote `MENU` button anywhere to jump between tabs, refresh catalogs, cycle the sleep timer, switch catalog language (`English` / `Français`), or exit cleanly.
+- **TV Remote Quick Menu & GitHub Update Check**: Press `MENU` anywhere for instant navigation, catalog refresh, sleep timer, language toggle (`English` / `Français`), or check for newer releases directly from **Settings → About**.
 - **Performance Tuned for Android TV**: Hardware-bitmap Coil `RGB_565` caching, explicit poster/backdrop decode sizes, `@Immutable` state models, and 160ms Hero focus debouncing.
 
 ---

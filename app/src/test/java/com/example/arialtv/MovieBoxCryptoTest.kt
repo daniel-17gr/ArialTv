@@ -4,6 +4,7 @@ import com.example.arialtv.data.model.PreferredCodec
 import com.example.arialtv.data.model.SeasonInfo
 import com.example.arialtv.data.model.StreamResource
 import com.example.arialtv.data.moviebox.MovieBoxCrypto
+import com.example.arialtv.data.moviebox.SubtitleShiftHelper
 import com.example.arialtv.data.repository.MediaRepository
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -86,5 +87,19 @@ class MovieBoxCryptoTest {
 
         val picked360 = MediaRepository.pickBestStream(streams, 360, PreferredCodec.AUTO_HARDWARE)
         assertEquals("1", picked360.resourceId)
+    }
+
+    @Test
+    fun subtitleShiftHelperShiftsSrtAndVttCleanly() {
+        val srt = "1\n00:00:01,000 --> 00:00:03,500\nHello world\n"
+        val shiftedPlus = SubtitleShiftHelper.shiftSubtitleText(srt, 500L)
+        assertEquals("1\n00:00:01,500 --> 00:00:04,000\nHello world\n", shiftedPlus)
+
+        val shiftedClamped = SubtitleShiftHelper.shiftSubtitleText(srt, -2000L)
+        assertEquals("1\n00:00:00,000 --> 00:00:01,500\nHello world\n", shiftedClamped)
+
+        val vtt = "WEBVTT\n\n00:01.200 --> 00:04.700\nLine\n"
+        val shiftedVtt = SubtitleShiftHelper.shiftSubtitleText(vtt, 1000L)
+        assertEquals("WEBVTT\n\n00:02.200 --> 00:05.700\nLine\n", shiftedVtt)
     }
 }

@@ -348,10 +348,11 @@ data class ConnectionTestResult(
 
 object AppMetadata {
     const val APP_NAME = "Arial TV"
-    const val VERSION_NAME = "1.1.0"
+    const val VERSION_NAME = "1.2.0"
     const val DEVELOPER_NAME = "Auris Daniel"
     const val GITHUB_HANDLE = "github.com/daniel-17gr"
     const val GITHUB_REPO_URL = "https://github.com/daniel-17gr/ArialTv"
+    const val GITHUB_RELEASES_API = "https://api.github.com/repos/daniel-17gr/ArialTv/releases/latest"
     val SLEEP_TIMER_OPTIONS: List<Int> = listOf(0, 15, 30, 45, 60, 90, 120, 180, 240)
 
     fun formatSleepLabel(minutes: Int): String = when {

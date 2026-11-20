@@ -5,13 +5,18 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.arialtv.ui.components.ExitConfirmationDialog
 import com.example.arialtv.ui.components.QuickMenuOverlay
+import com.example.arialtv.ui.components.SplashLoadingOverlay
 import com.example.arialtv.ui.components.TvNavigationShell
 import com.example.arialtv.ui.screens.CatalogScreen
 import com.example.arialtv.ui.screens.DetailScreen
@@ -22,6 +27,7 @@ import com.example.arialtv.ui.screens.SettingsScreen
 import com.example.arialtv.ui.viewmodel.AppDestination
 import com.example.arialtv.ui.viewmodel.ArialTvViewModel
 import com.example.arialtv.ui.viewmodel.TvNavTab
+import kotlinx.coroutines.delay
 
 @Composable
 fun ArialTvApp(
@@ -29,6 +35,12 @@ fun ArialTvApp(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val activity = LocalContext.current as? Activity
+    var showSplash by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        delay(2_200L)
+        showSplash = false
+    }
 
     // Always intercept Back so pressing Back on Home shows the clean Exit Confirmation dialog
     BackHandler(enabled = true) {
@@ -214,6 +226,7 @@ fun ArialTvApp(
                             onSetSleepTimer = viewModel::setSleepTimer,
                             onUpdateSubtitleStyle = viewModel::updateSubtitleStyle,
                             onTestConnection = viewModel::runConnectionTest,
+                            onCheckForUpdates = viewModel::checkForGithubUpdate,
                             onClearWatchHistory = viewModel::clearWatchHistory,
                             onClearSearchHistory = viewModel::clearSearchHistory,
                             onClearWatchlist = viewModel::clearWatchlist,
@@ -242,5 +255,7 @@ fun ArialTvApp(
                 onConfirmExit = { activity?.finish() },
             )
         }
+
+        SplashLoadingOverlay(visible = showSplash)
     }
 }

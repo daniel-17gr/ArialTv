@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -99,6 +100,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -124,6 +126,7 @@ import com.example.arialtv.data.model.SubtitlePosition
 import com.example.arialtv.data.model.SubtitleSize
 import com.example.arialtv.data.model.SubtitleStyle
 import com.example.arialtv.data.moviebox.MovieBoxConfig
+import com.example.arialtv.data.moviebox.SubtitleShiftHelper
 import com.example.arialtv.data.storage.AppPreferences
 import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkMuted
@@ -306,27 +309,33 @@ fun PlayerScreen(
         }
     }
 
-    val dataSourceFactory = remember {
-        val streamOkHttp = OkHttpClient.Builder()
+    val streamOkHttp = remember {
+        OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
+    }
 
+    val okHttpDataSourceFactory = remember(streamOkHttp) {
         OkHttpDataSource.Factory(streamOkHttp)
             .setUserAgent(MovieBoxConfig.CDN_USER_AGENT)
     }
 
+    val mediaDataSourceFactory = remember(context, okHttpDataSourceFactory) {
+        DefaultDataSource.Factory(context, okHttpDataSourceFactory)
+    }
+
     // Build resilient ExoPlayer with FFmpeg audio decoders + decoder fallback + optional software video mode
-    val exoPlayer = remember(context, dataSourceFactory, preferSoftwareDecoder) {
+    val exoPlayer = remember(context, mediaDataSourceFactory, preferSoftwareDecoder) {
         val renderersFactory = createSafeRenderersFactory(
             context = context,
             preferSoftwareVideo = preferSoftwareDecoder,
         )
         runCatching {
             ExoPlayer.Builder(context, renderersFactory)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                .setMediaSourceFactory(DefaultMediaSourceFactory(mediaDataSourceFactory))
                 .setSeekBackIncrementMs(10_000L)
                 .setSeekForwardIncrementMs(10_000L)
                 .build()
@@ -335,7 +344,7 @@ fun PlayerScreen(
                 }
         }.getOrElse {
             ExoPlayer.Builder(context)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                .setMediaSourceFactory(DefaultMediaSourceFactory(mediaDataSourceFactory))
                 .build()
                 .apply {
                     playWhenReady = true
@@ -480,12 +489,13 @@ fun PlayerScreen(
         }
     }
 
-    // Load stream + subtitle track cleanly (also re-runs when exoPlayer rebuilds in software mode)
+    // Load stream + subtitle track cleanly (supports live subtitle sync offset & software decoder rebuilds)
     val playback = playerState.playback
     val selectedStream = playback?.selectedStream
     val selectedSubtitle = playback?.subtitles?.firstOrNull { it.id == playerState.selectedSubtitleId }
+    var subtitleOffsetMs by remember(episodeKey, selectedSubtitle?.id) { mutableLongStateOf(0L) }
 
-    LaunchedEffect(exoPlayer, episodeKey, selectedStream?.url, selectedSubtitle?.url) {
+    LaunchedEffect(exoPlayer, episodeKey, selectedStream?.url, selectedSubtitle?.url, subtitleOffsetMs) {
         val stream = selectedStream ?: return@LaunchedEffect
         playbackError = null
         isEnded = false
@@ -493,7 +503,7 @@ fun PlayerScreen(
         isBuffering = true
 
         runCatching {
-            dataSourceFactory.setDefaultRequestProperties(stream.headers)
+            okHttpDataSourceFactory.setDefaultRequestProperties(stream.headers)
 
             val resumeAt = when {
                 loadedEpisodeKey == episodeKey && currentPositionMs > 3_000L -> currentPositionMs
@@ -508,12 +518,23 @@ fun PlayerScreen(
                 mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
             }
             if (selectedSubtitle != null && selectedSubtitle.url.isNotBlank()) {
-                val subMime = if (selectedSubtitle.url.contains(".vtt", ignoreCase = true)) {
+                val shiftedFile = if (subtitleOffsetMs != 0L) {
+                    SubtitleShiftHelper.getShiftedSubtitleFile(
+                        context = context,
+                        url = selectedSubtitle.url,
+                        offsetMs = subtitleOffsetMs,
+                        httpClient = streamOkHttp,
+                    )
+                } else {
+                    null
+                }
+                val subUri = if (shiftedFile != null) Uri.fromFile(shiftedFile) else Uri.parse(selectedSubtitle.url)
+                val subMime = if (subUri.toString().contains(".vtt", ignoreCase = true)) {
                     MimeTypes.TEXT_VTT
                 } else {
                     MimeTypes.APPLICATION_SUBRIP
                 }
-                val subConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(selectedSubtitle.url))
+                val subConfig = MediaItem.SubtitleConfiguration.Builder(subUri)
                     .setMimeType(subMime)
                     .setLanguage(selectedSubtitle.languageCode.ifBlank { "en" })
                     .setLabel(selectedSubtitle.languageName)
@@ -1475,6 +1496,34 @@ fun PlayerScreen(
             }
         }
 
+        // Early "Next Episode" Floating Pill during final 45 seconds of a TV series episode
+        val remainingMs = (durationMs - currentPositionMs).coerceAtLeast(0L)
+        val showEarlyNextEpisode = destination.item.isSeries &&
+            durationMs > 120_000L &&
+            remainingMs in 2_000L..45_000L &&
+            !controlsVisible &&
+            activeDrawer == PlayerDrawer.NONE &&
+            !modalBlockingStage
+
+        AnimatedVisibility(
+            visible = showEarlyNextEpisode,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 36.dp, bottom = 36.dp),
+        ) {
+            PlayerPillButton(
+                label = "Next Episode",
+                icon = Icons.Rounded.SkipNext,
+                primary = true,
+                onClick = {
+                    runCatching { onSaveProgress(exoPlayer.currentPosition, exoPlayer.duration) }
+                    onNextEpisode()
+                },
+            )
+        }
+
         // Right Slide-Over Drawer (Episodes / Subtitles / Volume / Quality / Speed / Sleep)
         AnimatedVisibility(
             visible = activeDrawer != PlayerDrawer.NONE && !modalBlockingStage,
@@ -1607,7 +1656,10 @@ fun PlayerScreen(
                         val seasons = destination.seasonsMeta
                         val curSe = seasons.firstOrNull { it.seasonNumber == drawerSeason } ?: seasons.firstOrNull()
                         if (seasons.size > 1) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            LazyRow(
+                                contentPadding = PaddingValues(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
                                 items(seasons, key = { it.seasonNumber }) { se ->
                                     val sel = se.seasonNumber == drawerSeason
                                     DrawerSmallChip(
@@ -1654,7 +1706,10 @@ fun PlayerScreen(
                             item {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("TEXT SIZE", style = MaterialTheme.typography.labelSmall, color = InkMuted)
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
                                         items(SubtitleSize.entries) { sz ->
                                             DrawerSmallChip(
                                                 label = sz.label,
@@ -1665,7 +1720,10 @@ fun PlayerScreen(
                                         }
                                     }
                                     Text("COLOR", style = MaterialTheme.typography.labelSmall, color = InkMuted)
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
                                         items(SubtitleColor.entries) { col ->
                                             DrawerSmallChip(
                                                 label = col.label,
@@ -1675,7 +1733,10 @@ fun PlayerScreen(
                                         }
                                     }
                                     Text("BACKGROUND", style = MaterialTheme.typography.labelSmall, color = InkMuted)
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
                                         items(SubtitleBackground.entries) { bg ->
                                             DrawerSmallChip(
                                                 label = bg.label,
@@ -1691,6 +1752,33 @@ fun PlayerScreen(
                                                 label = pos.label,
                                                 selected = settings.subtitleStyle.position == pos,
                                                 onClick = { onUpdateSubtitleStyle { it.copy(position = pos) } },
+                                            )
+                                        }
+                                    }
+                                    if (selectedSubtitle != null) {
+                                        val offsetSec = subtitleOffsetMs / 1000.0
+                                        val offsetLabel = if (subtitleOffsetMs == 0L) "0.0s"
+                                        else String.format(Locale.US, "%+.1fs", offsetSec)
+                                        Text(
+                                            text = "SYNC OFFSET  ·  $offsetLabel",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = InkMuted,
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            DrawerSmallChip(
+                                                label = "-0.5s",
+                                                selected = false,
+                                                onClick = { subtitleOffsetMs -= 500L },
+                                            )
+                                            DrawerSmallChip(
+                                                label = "Reset",
+                                                selected = subtitleOffsetMs == 0L,
+                                                onClick = { subtitleOffsetMs = 0L },
+                                            )
+                                            DrawerSmallChip(
+                                                label = "+0.5s",
+                                                selected = false,
+                                                onClick = { subtitleOffsetMs += 500L },
                                             )
                                         }
                                     }

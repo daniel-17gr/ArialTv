@@ -45,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -270,57 +272,73 @@ private fun LiveFilterBar(
     onApplyFilter: (genre: String, year: String, sort: String, country: String) -> Unit,
     onClearFilter: () -> Unit,
 ) {
-    LazyRow(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(CanvasBlack),
-        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        item(key = "flt_all") {
-            CatalogFilterChip(
-                label = "All",
-                selected = !tabState.isFilterActive,
-                onClick = onClearFilter,
-            )
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            item(key = "flt_all") {
+                CatalogFilterChip(
+                    label = "All",
+                    selected = !tabState.isFilterActive,
+                    onClick = onClearFilter,
+                )
+            }
+
+            items(QUICK_SORT_FILTERS, key = { "sort_${it.first}" }) { (sortKey, label) ->
+                val selected = tabState.activeSort == sortKey
+                CatalogFilterChip(
+                    label = label,
+                    selected = selected,
+                    onClick = {
+                        val nextSort = if (selected) "ForYou" else sortKey
+                        onApplyFilter(tabState.activeGenre, tabState.activeYear, nextSort, tabState.activeCountry)
+                    },
+                )
+            }
+
+            items(QUICK_YEAR_FILTERS, key = { "yr_$it" }) { yr ->
+                val selected = tabState.activeYear == yr
+                CatalogFilterChip(
+                    label = yr,
+                    selected = selected,
+                    onClick = {
+                        val nextYear = if (selected) "All" else yr
+                        onApplyFilter(tabState.activeGenre, nextYear, tabState.activeSort, tabState.activeCountry)
+                    },
+                )
+            }
+
+            items(genreOptions, key = { "gen_${it.genre}" }) { option ->
+                val selected = tabState.activeGenre.equals(option.genre, ignoreCase = true)
+                CatalogFilterChip(
+                    label = option.label,
+                    selected = selected,
+                    onClick = {
+                        val nextGenre = if (selected) "All" else option.genre
+                        onApplyFilter(nextGenre, tabState.activeYear, tabState.activeSort, option.country)
+                    },
+                )
+            }
         }
 
-        items(QUICK_SORT_FILTERS, key = { "sort_${it.first}" }) { (sortKey, label) ->
-            val selected = tabState.activeSort == sortKey
-            CatalogFilterChip(
-                label = label,
-                selected = selected,
-                onClick = {
-                    val nextSort = if (selected) "ForYou" else sortKey
-                    onApplyFilter(tabState.activeGenre, tabState.activeYear, nextSort, tabState.activeCountry)
-                },
-            )
-        }
-
-        items(QUICK_YEAR_FILTERS, key = { "yr_$it" }) { yr ->
-            val selected = tabState.activeYear == yr
-            CatalogFilterChip(
-                label = yr,
-                selected = selected,
-                onClick = {
-                    val nextYear = if (selected) "All" else yr
-                    onApplyFilter(tabState.activeGenre, nextYear, tabState.activeSort, tabState.activeCountry)
-                },
-            )
-        }
-
-        items(genreOptions, key = { "gen_${it.genre}" }) { option ->
-            val selected = tabState.activeGenre.equals(option.genre, ignoreCase = true)
-            CatalogFilterChip(
-                label = option.label,
-                selected = selected,
-                onClick = {
-                    val nextGenre = if (selected) "All" else option.genre
-                    onApplyFilter(nextGenre, tabState.activeYear, tabState.activeSort, option.country)
-                },
-            )
-        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(36.dp)
+                .height(48.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, CanvasBlack.copy(alpha = 0.90f)),
+                    ),
+                ),
+        )
     }
 }
 
@@ -374,15 +392,13 @@ private fun FilteredCatalogGrid(
     }
 
     Column(
-        modifier = modifier
-            .background(CanvasBlack)
-            .padding(horizontal = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier.background(CanvasBlack),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
+                .padding(start = 32.dp, end = 32.dp, top = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -457,9 +473,9 @@ private fun FilteredCatalogGrid(
             else -> {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 132.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 36.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    contentPadding = PaddingValues(start = 32.dp, end = 32.dp, top = 12.dp, bottom = 40.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     items(

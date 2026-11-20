@@ -143,38 +143,40 @@ fun DetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding(),
-            contentPadding = PaddingValues(horizontal = 36.dp, vertical = 22.dp),
+            contentPadding = PaddingValues(vertical = 22.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             // Minimal Back Bar
             item(key = "detail_back") {
-                val backShape = RoundedCornerShape(50)
-                Surface(
-                    onClick = onBack,
-                    shape = ClickableSurfaceDefaults.shape(backShape),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0x30FFFFFF),
-                        contentColor = PureWhite,
-                        focusedContainerColor = PureWhite,
-                        focusedContentColor = InkOnWhite,
-                    ),
-                    border = ClickableSurfaceDefaults.border(
-                        border = Border.None,
-                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = backShape),
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                Box(modifier = Modifier.padding(horizontal = 36.dp)) {
+                    val backShape = RoundedCornerShape(50)
+                    Surface(
+                        onClick = onBack,
+                        shape = ClickableSurfaceDefaults.shape(backShape),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0x30FFFFFF),
+                            contentColor = PureWhite,
+                            focusedContainerColor = PureWhite,
+                            focusedContentColor = InkOnWhite,
+                        ),
+                        border = ClickableSurfaceDefaults.border(
+                            border = Border.None,
+                            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = backShape),
+                        ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back",
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(7.dp))
-                        Text("Back", style = MaterialTheme.typography.labelLarge)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(7.dp))
+                            Text("Back", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 }
             }
@@ -182,7 +184,9 @@ fun DetailScreen(
             // Main Poster + Editorial Info + Actions
             item(key = "detail_header") {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 36.dp),
                     horizontalArrangement = Arrangement.spacedBy(26.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -400,7 +404,10 @@ fun DetailScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = InkMuted,
                                 )
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LazyRow(
+                                    contentPadding = PaddingValues(vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
                                     items(dubs, key = { it.subjectId }) { dub ->
                                         val isCurrent = dub.subjectId == item.id
                                         val dubShape = RoundedCornerShape(50)
@@ -440,9 +447,11 @@ fun DetailScreen(
                         episodeProgress[AppPreferences.episodeKey(item.id, activeSeasonInfo.seasonNumber, ep)]?.isWatched == true
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 36.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -451,7 +460,10 @@ fun DetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 Text("Episodes", style = MaterialTheme.typography.titleLarge, color = PureWhite)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LazyRow(
+                                    contentPadding = PaddingValues(vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
                                     items(seasons, key = { "se_${it.seasonNumber}" }) { seInfo ->
                                         val selected = seInfo.seasonNumber == activeSeasonInfo.seasonNumber
                                         val seShape = RoundedCornerShape(50)
@@ -491,8 +503,9 @@ fun DetailScreen(
                         val bestLabel = if (bestRes >= 2160) "4K" else "${bestRes}p"
 
                         LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(vertical = 6.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            contentPadding = PaddingValues(horizontal = 36.dp, vertical = 12.dp),
                         ) {
                             items((1..activeSeasonInfo.episodeCount).toList(), key = { "s${activeSeasonInfo.seasonNumber}_e$it" }) { epNum ->
                                 val epProg = episodeProgress[AppPreferences.episodeKey(item.id, activeSeasonInfo.seasonNumber, epNum)]
@@ -586,13 +599,22 @@ fun DetailScreen(
                 }
             }
 
-            // Borderless Cast Strip
+            // Borderless Cast Strip (edge-to-edge LazyRow)
             val staff = details?.staff.orEmpty()
             if (staff.isNotEmpty()) {
                 item(key = "detail_cast") {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Cast", style = MaterialTheme.typography.titleLarge, color = PureWhite)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Cast",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = PureWhite,
+                            modifier = Modifier.padding(horizontal = 36.dp),
+                        )
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 36.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        ) {
                             items(staff.take(15), key = { "${it.id}_${it.name}" }) { member ->
                                 Column(
                                     modifier = Modifier.width(96.dp),

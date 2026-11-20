@@ -1,6 +1,11 @@
 package com.example.arialtv.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
 import android.view.KeyEvent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.NorthWest
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.runtime.Composable
@@ -44,6 +50,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -92,6 +100,21 @@ fun SearchScreen(
     val filterFilmsFocus = remember { FocusRequester() }
     val filterSeriesFocus = remember { FocusRequester() }
 
+    val voiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+            if (!spoken.isNullOrEmpty()) {
+                onQueryChange(spoken)
+                onSearchSubmit(spoken)
+            }
+        }
+    }
+
     val activeFilterRequester = when (searchState.selectedFilterType) {
         1 -> filterFilmsFocus
         2 -> filterSeriesFocus
@@ -102,12 +125,14 @@ fun SearchScreen(
         modifier = modifier
             .fillMaxSize()
             .background(CanvasBlack)
-            .padding(horizontal = 32.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Sleek Borderless YouTube TV Search Bar
+        // Sleek Borderless YouTube TV Search Bar + Voice Search Mic
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -198,6 +223,39 @@ fun SearchScreen(
                 }
             }
 
+            // Voice Search Mic button (Android TV remote mic)
+            Surface(
+                onClick = {
+                    runCatching {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak a film or series title")
+                        }
+                        voiceLauncher.launch(intent)
+                    }
+                },
+                shape = ClickableSurfaceDefaults.shape(CircleShape),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = SurfaceElevated,
+                    contentColor = InkPrimary,
+                    focusedContainerColor = PureWhite,
+                    focusedContentColor = InkOnWhite,
+                ),
+                border = ClickableSurfaceDefaults.border(
+                    border = Border.None,
+                    focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = CircleShape),
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+                modifier = Modifier.focusProperties { down = activeFilterRequester },
+            ) {
+                Box(
+                    modifier = Modifier.size(50.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Mic, contentDescription = "Voice Search", modifier = Modifier.size(21.dp))
+                }
+            }
+
             // Submit pill
             val pillShape = RoundedCornerShape(50)
             Surface(
@@ -229,7 +287,9 @@ fun SearchScreen(
 
         // Filter Pills (All / Films / Series) — explicitly D-pad reachable from search bar!
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -296,7 +356,7 @@ fun SearchScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(start = 32.dp, end = 32.dp, top = 4.dp, bottom = 28.dp),
                 ) {
                     item(key = "suggest_header") {
                         Text(
@@ -350,7 +410,9 @@ fun SearchScreen(
 
             searchState.results.isNotEmpty() -> {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -363,9 +425,9 @@ fun SearchScreen(
 
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 132.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 36.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    contentPadding = PaddingValues(start = 32.dp, end = 32.dp, top = 12.dp, bottom = 40.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     items(searchState.results, key = { "sr_${it.id}" }, contentType = { "media_card" }) { item ->
@@ -395,7 +457,10 @@ fun SearchScreen(
                 ) {
                     if (searchHistory.isNotEmpty()) {
                         item(key = "recent_searches") {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 32.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -443,16 +508,21 @@ fun SearchScreen(
                         }
                     }
 
-                    // Live API Trending Search Terms (only shown if API returned terms)
+                    // Live API Trending Search Terms (edge-to-edge LazyRow)
                     if (searchState.trendingTerms.isNotEmpty()) {
                         item(key = "api_trending_terms") {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     text = "TRENDING SEARCHES",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = InkSecondary,
+                                    modifier = Modifier.padding(horizontal = 32.dp),
                                 )
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(horizontal = 32.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
                                     items(searchState.trendingTerms, key = { "tt_$it" }) { term ->
                                         SearchFilterChip(label = term, selected = false) {
                                             onSearchSubmit(term)
@@ -463,25 +533,40 @@ fun SearchScreen(
                         }
                     }
 
-                    // Live API Trending Titles from `/subject-api/search-rank` (zero hardcoded items!)
+                    // Live API Trending Titles from `/subject-api/search-rank` (edge-to-edge LazyRow + soft right fade)
                     if (filteredTrending.isNotEmpty()) {
                         item(key = "api_trending_titles") {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
                                     text = "TRENDING NOW",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = InkSecondary,
+                                    modifier = Modifier.padding(horizontal = 32.dp),
                                 )
-                                LazyRow(
-                                    contentPadding = PaddingValues(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                ) {
-                                    items(filteredTrending, key = { "tr_${it.id}" }, contentType = { "media_card" }) { item ->
-                                        TvMediaCard(
-                                            item = item,
-                                            onClick = { onItemClick(item) },
-                                        )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    ) {
+                                        items(filteredTrending, key = { "tr_${it.id}" }, contentType = { "media_card" }) { item ->
+                                            TvMediaCard(
+                                                item = item,
+                                                onClick = { onItemClick(item) },
+                                            )
+                                        }
                                     }
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.CenterEnd)
+                                            .width(42.dp)
+                                            .height(248.dp)
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    colors = listOf(Color.Transparent, CanvasBlack.copy(alpha = 0.88f)),
+                                                ),
+                                            ),
+                                    )
                                 }
                             }
                         }

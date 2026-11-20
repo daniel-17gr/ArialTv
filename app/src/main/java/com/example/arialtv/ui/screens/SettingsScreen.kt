@@ -117,6 +117,7 @@ fun SettingsScreen(
     onSetSleepTimer: (Int) -> Unit,
     onUpdateSubtitleStyle: ((SubtitleStyle) -> SubtitleStyle) -> Unit,
     onTestConnection: () -> Unit,
+    onCheckForUpdates: () -> Unit,
     onClearWatchHistory: () -> Unit,
     onClearSearchHistory: () -> Unit,
     onClearWatchlist: () -> Unit,
@@ -203,6 +204,7 @@ fun SettingsScreen(
                         onSetSleepTimer = onSetSleepTimer,
                         onUpdateSubtitleStyle = onUpdateSubtitleStyle,
                         onTestConnection = onTestConnection,
+                        onCheckForUpdates = onCheckForUpdates,
                         onClearWatchHistory = onClearWatchHistory,
                         onClearSearchHistory = onClearSearchHistory,
                         onClearWatchlist = onClearWatchlist,
@@ -212,7 +214,10 @@ fun SettingsScreen(
                     )
                 }
             } else {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     items(SettingsSection.entries) { section ->
                         SettingsPill(
                             label = section.label,
@@ -242,6 +247,7 @@ fun SettingsScreen(
                     onSetSleepTimer = onSetSleepTimer,
                     onUpdateSubtitleStyle = onUpdateSubtitleStyle,
                     onTestConnection = onTestConnection,
+                    onCheckForUpdates = onCheckForUpdates,
                     onClearWatchHistory = onClearWatchHistory,
                     onClearSearchHistory = onClearSearchHistory,
                     onClearWatchlist = onClearWatchlist,
@@ -277,6 +283,7 @@ private fun SettingsSectionDetail(
     onSetSleepTimer: (Int) -> Unit,
     onUpdateSubtitleStyle: ((SubtitleStyle) -> SubtitleStyle) -> Unit,
     onTestConnection: () -> Unit,
+    onCheckForUpdates: () -> Unit,
     onClearWatchHistory: () -> Unit,
     onClearSearchHistory: () -> Unit,
     onClearWatchlist: () -> Unit,
@@ -600,6 +607,24 @@ private fun SettingsSectionDetail(
                             AboutMetaRow(label = "DEVELOPED BY", value = AppMetadata.DEVELOPER_NAME)
                             AboutMetaRow(label = "GITHUB", value = AppMetadata.GITHUB_REPO_URL)
                             AboutMetaRow(label = "PLATFORM", value = "Android TV · Jetpack Compose · Media3 + FFmpeg")
+                        }
+
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(DividerHairline))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            SettingsPill(
+                                label = if (settingsUiState.isCheckingUpdate) "Checking Updates..." else "Check for Updates",
+                                selected = false,
+                                onClick = onCheckForUpdates,
+                            )
+                            val updateMsg = settingsUiState.updateStatusMessage
+                            if (!updateMsg.isNullOrBlank()) {
+                                Text(
+                                    text = updateMsg,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = InkSecondary,
+                                )
+                            }
                         }
                     }
                 }

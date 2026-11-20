@@ -21,6 +21,7 @@ import com.example.arialtv.data.model.SubtitleStyle
 import com.example.arialtv.data.model.WatchProgress
 import com.example.arialtv.data.repository.MediaRepository
 import com.example.arialtv.data.storage.AppPreferences
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 enum class TvNavTab(val label: String) {
     SEARCH("Search"),
@@ -103,6 +109,8 @@ data class PlayerUiState(
 data class SettingsUiState(
     val isTesting: Boolean = false,
     val testResult: ConnectionTestResult? = null,
+    val isCheckingUpdate: Boolean = false,
+    val updateStatusMessage: String? = null,
 )
 
 data class ArialTvUiState(
@@ -997,12 +1005,68 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun runConnectionTest() {
-        _uiState.update { it.copy(settingsState = SettingsUiState(isTesting = true, testResult = null)) }
+        _uiState.update {
+            it.copy(settingsState = it.settingsState.copy(isTesting = true, testResult = null))
+        }
         val settings = _uiState.value.settings
         viewModelScope.launch {
             val result = repository.testConnection(settings)
             _uiState.update {
-                it.copy(settingsState = SettingsUiState(isTesting = false, testResult = result))
+                it.copy(settingsState = it.settingsState.copy(isTesting = false, testResult = result))
+            }
+        }
+    }
+
+    fun checkForGithubUpdate() {
+        if (_uiState.value.settingsState.isCheckingUpdate) return
+        _uiState.update {
+            it.copy(
+                settingsState = it.settingsState.copy(
+                    isCheckingUpdate = true,
+                    updateStatusMessage = "Checking GitHub releases...",
+                ),
+            )
+        }
+        viewModelScope.launch {
+            val statusMsg = withContext(Dispatchers.IO) {
+                runCatching {
+                    val client = OkHttpClient.Builder()
+                        .connectTimeout(10, TimeUnit.SECONDS)
+                        .readTimeout(10, TimeUnit.SECONDS)
+                        .build()
+                    val req = Request.Builder()
+                        .url(AppMetadata.GITHUB_RELEASES_API)
+                        .header("Accept", "application/vnd.github+json")
+                        .header("User-Agent", "ArialTV/${AppMetadata.VERSION_NAME}")
+                        .get()
+                        .build()
+                    client.newCall(req).execute().use { resp ->
+                        when {
+                            resp.code == 404 -> "Current version v${AppMetadata.VERSION_NAME} (no GitHub release published yet)"
+                            !resp.isSuccessful -> "Couldn't check updates right now (HTTP ${resp.code})"
+                            else -> {
+                                val json = JSONObject(resp.body?.string().orEmpty())
+                                val latestTag = json.optString("tag_name", "").trim()
+                                val cleanLatest = latestTag.removePrefix("v").removePrefix("V")
+                                if (cleanLatest.isEmpty() || cleanLatest == AppMetadata.VERSION_NAME) {
+                                    "You're up to date (v${AppMetadata.VERSION_NAME})"
+                                } else {
+                                    "Update available: $latestTag — download on ${AppMetadata.GITHUB_HANDLE}/ArialTv"
+                                }
+                            }
+                        }
+                    }
+                }.getOrElse {
+                    "Unable to reach GitHub right now."
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    settingsState = it.settingsState.copy(
+                        isCheckingUpdate = false,
+                        updateStatusMessage = statusMsg,
+                    ),
+                )
             }
         }
     }

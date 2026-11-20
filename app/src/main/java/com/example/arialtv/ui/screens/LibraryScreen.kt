@@ -141,8 +141,9 @@ fun LibraryScreen(
                     }
 
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         items(watchlist, key = { "wl_${it.id}" }) { item ->
                             TvMediaCard(
