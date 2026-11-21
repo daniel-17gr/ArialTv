@@ -1,6 +1,5 @@
 package com.example.arialtv.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +18,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -55,14 +54,12 @@ import com.example.arialtv.data.model.WatchProgress
 import com.example.arialtv.data.storage.AppPreferences
 import com.example.arialtv.ui.components.TvMediaRail
 import com.example.arialtv.ui.theme.CanvasBlack
-import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
 import com.example.arialtv.ui.theme.RatingGold
-import com.example.arialtv.ui.theme.SelectedBorderRed
 import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.StatusGreen
 import com.example.arialtv.ui.theme.SurfaceElevated
@@ -98,13 +95,13 @@ fun DetailScreen(
             .fillMaxSize()
             .background(CanvasBlack),
     ) {
-        // Full-bleed widescreen backdrop melting into CanvasBlack
+        // Full-bleed widescreen backdrop melting into CanvasBlack (lean 640x360 for low-RAM TVs)
         if (item.effectiveBackdropUrl.isNotBlank()) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(item.effectiveBackdropUrl)
-                    .size(960, 540)
-                    .crossfade(true)
+                    .size(640, 360)
+                    .crossfade(false)
                     .build(),
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
@@ -161,11 +158,8 @@ fun DetailScreen(
                             focusedContainerColor = PureWhite,
                             focusedContentColor = InkOnWhite,
                         ),
-                        border = ClickableSurfaceDefaults.border(
-                            border = Border.None,
-                            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = backShape),
-                        ),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
@@ -204,8 +198,8 @@ fun DetailScreen(
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current)
                                     .data(item.posterUrl)
-                                    .size(320, 480)
-                                    .crossfade(true)
+                                    .size(220, 330)
+                                    .crossfade(false)
                                     .build(),
                                 contentDescription = item.title,
                                 contentScale = ContentScale.Crop,
@@ -279,24 +273,25 @@ fun DetailScreen(
                             )
                         }
 
-                        // Primary Actions
-                        val hasResume = watchProgress != null && watchProgress.positionMs > 5_000L
+                        // Primary Actions (safe null handling, zero colored outlines)
+                        val progress = watchProgress
+                        val hasResume = progress != null && progress.positionMs > 5_000L
                         val nextUnwatched = findNextUnwatchedEpisode(item.id, seasons, episodeProgress)
                         val playSeason = when {
-                            hasResume && item.isSeries -> watchProgress!!.season
+                            hasResume && item.isSeries && progress != null -> progress.season
                             item.isSeries && nextUnwatched != null -> nextUnwatched.first
                             item.isSeries -> activeSeasonInfo?.seasonNumber ?: 1
                             else -> 0
                         }
                         val playEp = when {
-                            hasResume && item.isSeries -> watchProgress!!.episode
+                            hasResume && item.isSeries && progress != null -> progress.episode
                             item.isSeries && nextUnwatched != null -> nextUnwatched.second
                             item.isSeries -> 1
                             else -> 0
                         }
                         val primaryLabel = when {
-                            hasResume && item.isSeries -> "Resume S${watchProgress!!.season} E${watchProgress.episode}"
-                            hasResume -> "Resume · ${formatShortDuration(watchProgress!!.positionMs)}"
+                            hasResume && item.isSeries && progress != null -> "Resume S${progress.season} E${progress.episode}"
+                            hasResume && progress != null -> "Resume · ${formatShortDuration(progress.positionMs)}"
                             item.isSeries -> "Play S$playSeason E$playEp"
                             else -> "Play"
                         }
@@ -312,16 +307,13 @@ fun DetailScreen(
                                 onClick = { onPlay(item, playSeason, playEp, hasResume, seasons, null) },
                                 shape = ClickableSurfaceDefaults.shape(pillShape),
                                 colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = PureWhite,
-                                    contentColor = InkOnWhite,
-                                    focusedContainerColor = SignalRed,
-                                    focusedContentColor = PureWhite,
+                                    containerColor = Color(0x38FFFFFF),
+                                    contentColor = PureWhite,
+                                    focusedContainerColor = PureWhite,
+                                    focusedContentColor = InkOnWhite,
                                 ),
-                                border = ClickableSurfaceDefaults.border(
-                                    border = Border.None,
-                                    focusedBorder = Border(BorderStroke(2.dp, FocusBorderWhite), shape = pillShape),
-                                ),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                                border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 11.dp),
@@ -343,10 +335,7 @@ fun DetailScreen(
                                         focusedContainerColor = PureWhite,
                                         focusedContentColor = InkOnWhite,
                                     ),
-                                    border = ClickableSurfaceDefaults.border(
-                                        border = Border.None,
-                                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = pillShape),
-                                    ),
+                                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                                 ) {
                                     Row(
@@ -366,14 +355,11 @@ fun DetailScreen(
                                 shape = ClickableSurfaceDefaults.shape(pillShape),
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = if (isInWatchlist) SurfaceSelected else SurfaceElevated,
-                                    contentColor = if (isInWatchlist) PureWhite else InkPrimary,
+                                    contentColor = PureWhite,
                                     focusedContainerColor = PureWhite,
                                     focusedContentColor = InkOnWhite,
                                 ),
-                                border = ClickableSurfaceDefaults.border(
-                                    border = if (isInWatchlist) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = pillShape) else Border.None,
-                                    focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = pillShape),
-                                ),
+                                border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                             ) {
                                 Row(
@@ -410,7 +396,7 @@ fun DetailScreen(
                                     contentPadding = PaddingValues(vertical = 6.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    items(dubs, key = { it.subjectId }) { dub ->
+                                    itemsIndexed(dubs, key = { idx, d -> "dub_${idx}_${d.subjectId}" }) { _, dub ->
                                         val isCurrent = dub.subjectId == item.id
                                         val dubShape = RoundedCornerShape(50)
                                         Surface(
@@ -422,10 +408,7 @@ fun DetailScreen(
                                                 focusedContainerColor = PureWhite,
                                                 focusedContentColor = InkOnWhite,
                                             ),
-                                            border = ClickableSurfaceDefaults.border(
-                                                border = if (isCurrent) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = dubShape) else Border.None,
-                                                focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = dubShape),
-                                            ),
+                                            border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                                             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                                         ) {
                                             Row(
@@ -470,15 +453,17 @@ fun DetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Row(
+                                modifier = Modifier.weight(1f),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 Text("Episodes", style = MaterialTheme.typography.titleLarge, color = PureWhite)
                                 LazyRow(
+                                    modifier = Modifier.weight(1f),
                                     contentPadding = PaddingValues(vertical = 6.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    items(seasons, key = { "se_${it.seasonNumber}" }) { seInfo ->
+                                    itemsIndexed(seasons, key = { idx, se -> "se_${idx}_${se.seasonNumber}" }) { _, seInfo ->
                                         val selected = seInfo.seasonNumber == activeSeasonInfo.seasonNumber
                                         val seShape = RoundedCornerShape(50)
                                         Surface(
@@ -490,11 +475,8 @@ fun DetailScreen(
                                                 focusedContainerColor = PureWhite,
                                                 focusedContentColor = InkOnWhite,
                                             ),
-                                            border = ClickableSurfaceDefaults.border(
-                                                border = if (selected) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = seShape) else Border.None,
-                                                focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = seShape),
-                                            ),
-                                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                                            border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                                         ) {
                                             Text(
                                                 text = String.format(Locale.US, "S%02d", seInfo.seasonNumber),
@@ -521,11 +503,11 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             contentPadding = PaddingValues(horizontal = 36.dp, vertical = 12.dp),
                         ) {
-                            items((1..activeSeasonInfo.episodeCount).toList(), key = { "s${activeSeasonInfo.seasonNumber}_e$it" }) { epNum ->
+                            itemsIndexed((1..activeSeasonInfo.episodeCount).toList(), key = { idx, ep -> "s${activeSeasonInfo.seasonNumber}_e${idx}_$ep" }) { _, epNum ->
                                 val epProg = episodeProgress[AppPreferences.episodeKey(item.id, activeSeasonInfo.seasonNumber, epNum)]
                                 val isWatched = epProg?.isWatched == true
                                 val frac = epProg?.progressFraction ?: 0f
-                                val epShape = RoundedCornerShape(14.dp)
+                                val epShape = RoundedCornerShape(12.dp)
 
                                 Surface(
                                     onClick = {
@@ -538,11 +520,8 @@ fun DetailScreen(
                                         focusedContainerColor = PureWhite,
                                         focusedContentColor = InkOnWhite,
                                     ),
-                                    border = ClickableSurfaceDefaults.border(
-                                        border = Border.None,
-                                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = epShape),
-                                    ),
-                                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                                 ) {
                                     Box(modifier = Modifier.width(164.dp)) {
                                         Column(
@@ -629,7 +608,7 @@ fun DetailScreen(
                             contentPadding = PaddingValues(horizontal = 36.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(18.dp),
                         ) {
-                            items(staff.take(15), key = { "${it.id}_${it.name}" }) { member ->
+                            itemsIndexed(staff.take(15), key = { idx, m -> "st_${idx}_${m.id}_${m.name}" }) { _, member ->
                                 Column(
                                     modifier = Modifier.width(96.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -646,8 +625,8 @@ fun DetailScreen(
                                             AsyncImage(
                                                 model = ImageRequest.Builder(LocalContext.current)
                                                     .data(member.avatarUrl)
-                                                    .size(140, 140)
-                                                    .crossfade(true)
+                                                    .size(96, 96)
+                                                    .crossfade(false)
                                                     .build(),
                                                 contentDescription = member.name,
                                                 contentScale = ContentScale.Crop,

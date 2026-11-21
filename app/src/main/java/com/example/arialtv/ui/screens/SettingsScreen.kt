@@ -1,9 +1,7 @@
 package com.example.arialtv.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -72,13 +70,11 @@ import com.example.arialtv.data.model.SubtitleSize
 import com.example.arialtv.data.model.SubtitleStyle
 import com.example.arialtv.ui.theme.CanvasBlack
 import com.example.arialtv.ui.theme.DividerHairline
-import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
-import com.example.arialtv.ui.theme.SelectedBorderRed
 import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.StatusGreen
 import com.example.arialtv.ui.theme.SurfaceElevated
@@ -166,11 +162,8 @@ fun SettingsScreen(
                                     focusedContainerColor = PureWhite,
                                     focusedContentColor = InkOnWhite,
                                 ),
-                                border = ClickableSurfaceDefaults.border(
-                                    border = if (selected) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-                                    focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-                                ),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
+                                border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Row(
@@ -535,11 +528,7 @@ private fun SettingsSectionDetail(
                                         .fillMaxWidth()
                                         .height(44.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(CanvasBlack)
-                                        .then(
-                                            if (urlInputFocused) Modifier.border(2.dp, SignalRed, RoundedCornerShape(12.dp))
-                                            else Modifier,
-                                        )
+                                        .background(if (urlInputFocused) SurfaceSelected else CanvasBlack)
                                         .padding(horizontal = 14.dp),
                                     contentAlignment = Alignment.CenterStart,
                                 ) {
@@ -722,13 +711,7 @@ private fun SettingsPill(
             focusedContainerColor = if (destructive) SignalRed else PureWhite,
             focusedContentColor = if (destructive) PureWhite else InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-            focusedBorder = Border(
-                BorderStroke(2.dp, if (destructive) FocusBorderWhite else SignalRed),
-                shape = shape,
-            ),
-        ),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
     ) {
         Text(

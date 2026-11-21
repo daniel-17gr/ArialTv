@@ -170,12 +170,12 @@ class MovieBoxV3Client(
         val parsed = mutableListOf<MediaItem>()
         for (i in 0 until itemsArray.length()) {
             val obj = itemsArray.optJSONObject(i) ?: continue
-            val item = parseSubject(obj) ?: continue
+            val item = runCatching { parseSubject(obj) }.getOrNull() ?: continue
             if (subjectType == 0 || item.subjectType == subjectType) {
                 parsed.add(item)
             }
         }
-        return parsed
+        return parsed.distinctBy { it.id }
     }
 
     suspend fun fetchSearchRank(): TrendingSearchRank {
@@ -327,9 +327,9 @@ class MovieBoxV3Client(
             durationSeconds = data.optIntSafe("durationSeconds").takeIf { it > 0 }
                 ?: data.optIntSafe("seconds"),
             totalSeasons = seasons.size.takeIf { it > 0 } ?: data.optIntSafe("seNum"),
-            dubs = dubs,
-            seasons = seasons,
-            staff = staff,
+            dubs = dubs.distinctBy { it.subjectId },
+            seasons = seasons.distinctBy { it.seasonNumber },
+            staff = staff.distinctBy { "${it.id}_${it.name}" },
             availableResolutions = availableResolutions,
         )
     }
@@ -476,7 +476,7 @@ class MovieBoxV3Client(
                 )
             }
         }
-        return result
+        return result.distinctBy { "${it.id}_${it.url}" }
     }
 
     private suspend fun getApiData(

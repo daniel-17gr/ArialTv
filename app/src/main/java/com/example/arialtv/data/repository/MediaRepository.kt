@@ -48,7 +48,7 @@ class MediaRepository(
     }
 
     private fun <T> putFresh(map: ConcurrentHashMap<String, CacheEntry<T>>, key: String, value: T) {
-        if (map.size > 48) map.clear()
+        if (map.size > 16) map.clear()
         map[key] = CacheEntry(value, System.currentTimeMillis())
     }
 

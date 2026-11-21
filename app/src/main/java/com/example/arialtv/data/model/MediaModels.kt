@@ -371,7 +371,7 @@ data class ConnectionTestResult(
 
 object AppMetadata {
     const val APP_NAME = "Arial TV"
-    const val VERSION_NAME = "1.3.0"
+    const val VERSION_NAME = "1.4.0"
     const val DEVELOPER_NAME = "Auris Daniel"
     const val GITHUB_HANDLE = "github.com/daniel-17gr"
     const val GITHUB_REPO_URL = "https://github.com/daniel-17gr/ArialTv"

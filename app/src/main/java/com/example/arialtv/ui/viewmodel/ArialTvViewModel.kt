@@ -24,6 +24,7 @@ import com.example.arialtv.data.model.SubtitleStyle
 import com.example.arialtv.data.model.WatchProgress
 import com.example.arialtv.data.repository.MediaRepository
 import com.example.arialtv.data.storage.AppPreferences
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -138,7 +139,6 @@ data class ArialTvUiState(
     val watchlist: List<MediaItem> = emptyList(),
     val recommendedRow: CatalogRow? = null,
     val sleepTimerMinutes: Int = 0,
-    val sleepTimerRemainingSec: Int = 0,
     val sleepTimerExpired: Boolean = false,
     val toastMessage: String? = null,
 )
@@ -146,6 +146,10 @@ data class ArialTvUiState(
 class ArialTvViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = AppPreferences(application)
     private val repository = MediaRepository()
+    private val safeHandler = CoroutineExceptionHandler { _, _ -> }
+
+    private val _sleepTimerRemainingSec = MutableStateFlow(0)
+    val sleepTimerRemainingSec: StateFlow<Int> = _sleepTimerRemainingSec.asStateFlow()
 
     private val _uiState = MutableStateFlow(
         ArialTvUiState(
@@ -607,6 +611,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     fun clearSearchHistory() {
         preferences.clearSearchHistory()
         _uiState.update { it.copy(searchHistory = emptyList()) }
+        showToast("Search history cleared")
     }
 
     // --- Watchlist / My List ---
@@ -621,6 +626,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     fun clearWatchlist() {
         preferences.clearWatchlist()
         _uiState.update { it.copy(watchlist = emptyList()) }
+        showToast("My List cleared")
     }
 
     // --- Details & Seasons ---
@@ -969,26 +975,29 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     fun setSleepTimer(minutes: Int) {
         sleepTimerJob?.cancel()
         if (minutes <= 0) {
+            _sleepTimerRemainingSec.value = 0
             _uiState.update {
-                it.copy(sleepTimerMinutes = 0, sleepTimerRemainingSec = 0, sleepTimerExpired = false)
+                it.copy(sleepTimerMinutes = 0, sleepTimerExpired = false)
             }
             showToast("Sleep timer off")
             return
         }
         val totalSec = minutes * 60
+        _sleepTimerRemainingSec.value = totalSec
         _uiState.update {
-            it.copy(sleepTimerMinutes = minutes, sleepTimerRemainingSec = totalSec, sleepTimerExpired = false)
+            it.copy(sleepTimerMinutes = minutes, sleepTimerExpired = false)
         }
         showToast("Sleep timer: ${AppMetadata.formatSleepLongLabel(minutes)}")
-        sleepTimerJob = viewModelScope.launch {
+        sleepTimerJob = viewModelScope.launch(safeHandler) {
             var remaining = totalSec
             while (remaining > 0) {
                 delay(1_000L)
                 remaining--
-                _uiState.update { it.copy(sleepTimerRemainingSec = remaining) }
+                _sleepTimerRemainingSec.value = remaining
             }
+            _sleepTimerRemainingSec.value = 0
             _uiState.update {
-                it.copy(sleepTimerMinutes = 0, sleepTimerRemainingSec = 0, sleepTimerExpired = true)
+                it.copy(sleepTimerMinutes = 0, sleepTimerExpired = true)
             }
         }
     }
@@ -1112,8 +1121,16 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun clearWatchHistory() {
+        recommendationJob?.cancel()
         preferences.clearWatchHistory()
-        _uiState.update { it.copy(watchHistory = emptyList(), episodeProgress = emptyMap()) }
+        _uiState.update {
+            it.copy(
+                watchHistory = emptyList(),
+                episodeProgress = emptyMap(),
+                recommendedRow = null,
+            )
+        }
+        showToast("Watch history cleared")
     }
 
     fun runConnectionTest() {

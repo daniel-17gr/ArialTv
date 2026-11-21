@@ -6,7 +6,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -39,7 +38,7 @@ import com.example.arialtv.ui.screens.PlayerScreen
 import com.example.arialtv.ui.screens.SearchScreen
 import com.example.arialtv.ui.screens.SettingsScreen
 import com.example.arialtv.ui.theme.PureWhite
-import com.example.arialtv.ui.theme.SelectedBorderRed
+import com.example.arialtv.ui.theme.SurfaceElevated
 import com.example.arialtv.ui.viewmodel.AppDestination
 import com.example.arialtv.ui.viewmodel.ArialTvViewModel
 import com.example.arialtv.ui.viewmodel.TvNavTab
@@ -54,10 +53,9 @@ fun ArialTvApp(
     var showSplash by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        delay(1_850L)
-        // Wait briefly up to 750ms more if Home is still finishing its initial parallel fetch
+        delay(1_100L)
         var extraWait = 0
-        while (viewModel.uiState.value.homeState.isLoading && extraWait < 750) {
+        while (viewModel.uiState.value.homeState.isLoading && extraWait < 600) {
             delay(150L)
             extraWait += 150
         }
@@ -78,7 +76,7 @@ fun ArialTvApp(
                     settings = state.settings,
                     episodeProgress = state.episodeProgress,
                     sleepTimerMinutes = state.sleepTimerMinutes,
-                    sleepTimerRemainingSec = state.sleepTimerRemainingSec,
+                    sleepTimerRemainingSecFlow = viewModel.sleepTimerRemainingSec,
                     sleepTimerExpired = state.sleepTimerExpired,
                     onSelectQuality = viewModel::selectStreamQuality,
                     onSelectAudioDub = viewModel::switchPlayerAudioDub,
@@ -126,10 +124,14 @@ fun ArialTvApp(
             }
 
             AppDestination.Browse -> {
+                val isFullBleedTop = state.activeTab == TvNavTab.HOME ||
+                    state.activeTab == TvNavTab.MOVIES ||
+                    state.activeTab == TvNavTab.SERIES
                 TvNavigationShell(
                     activeTab = state.activeTab,
                     language = state.settings.language,
-                    sleepTimerRemainingSec = state.sleepTimerRemainingSec,
+                    sleepTimerRemainingSecFlow = viewModel.sleepTimerRemainingSec,
+                    isFullBleedTop = isFullBleedTop,
                     onSelectTab = viewModel::selectTab,
                     onToggleLanguage = viewModel::toggleLanguage,
                     onRefresh = viewModel::refreshCurrentTab,
@@ -301,8 +303,7 @@ fun ArialTvApp(
             Box(
                 modifier = Modifier
                     .clip(pillShape)
-                    .background(Color(0xE8141414))
-                    .border(1.dp, SelectedBorderRed, pillShape)
+                    .background(SurfaceElevated)
                     .padding(horizontal = 20.dp, vertical = 9.dp),
             ) {
                 Text(

@@ -48,10 +48,10 @@ import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.SurfaceElevated
 import com.example.arialtv.ui.theme.SurfaceTonal
 
-private val PosterCardShape = RoundedCornerShape(12.dp)
-private val PosterBadgeShape = RoundedCornerShape(5.dp)
-private val PosterFocusBorder = Border(BorderStroke(2.5.dp, PureWhite), shape = PosterCardShape)
-private val PosterBadgeScrim = Color(0xC20A0A0A)
+private val PosterCardShape = RoundedCornerShape(10.dp)
+private val PosterBadgeShape = RoundedCornerShape(4.dp)
+private val PosterFocusBorder = Border(BorderStroke(2.dp, PureWhite), shape = PosterCardShape)
+private val PosterBadgeScrim = Color(0xC20F0F0F)
 private val ProgressTrackBg = Color(0x66FFFFFF)
 
 /**
@@ -91,7 +91,7 @@ fun TvMediaCard(
                     }
                 },
             shape = CardDefaults.shape(shape = PosterCardShape),
-            scale = CardDefaults.scale(focusedScale = 1.05f),
+            scale = CardDefaults.scale(focusedScale = 1.04f),
             border = CardDefaults.border(
                 border = Border.None,
                 focusedBorder = PosterFocusBorder,
@@ -108,8 +108,8 @@ fun TvMediaCard(
                     val request = remember(item.posterUrl) {
                         ImageRequest.Builder(context)
                             .data(item.posterUrl)
-                            .size(280, 420)
-                            .crossfade(150)
+                            .size(180, 270)
+                            .crossfade(false)
                             .build()
                     }
                     AsyncImage(

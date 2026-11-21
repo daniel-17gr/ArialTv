@@ -9,12 +9,11 @@ Developed by **Auris Daniel** ([@daniel-17gr](https://github.com/daniel-17gr)).
 ## Highlights
 
 - **10-Foot Android TV Experience**: Built with Jetpack Compose, Material 3 for TV (`androidx.tv:tv-material`), and collapsible YouTube TV–style left rail navigation.
-- **Nothing OS × YouTube TV Design**:
-  - Rhythmic Nothing OS dot-matrix launch splash screen with version & developer footer.
-  - `Doto` dot-matrix display accents paired with `Plus Jakarta Sans`.
-  - Unmistakable 3-state focus hierarchy (unfocused matte dark, active Signal Red outline, pure white + Signal Red focus ring).
-  - Edge-to-edge poster rails with soft edge fades (zero trimmed padding) and content-type badges (`MOVIE`, `SERIES`, `DOC`, `MUSIC`).
-  - Subtle banner-backed modern frosted command-capsule top app bar (Quick Search, `EN`/`FR` language toggle, Sleep Timer, Refresh, Dot-Matrix Clock + Date).
+- **YouTube TV Clean Design**:
+  - Minimal, fast launch screen with `arial tv.` branding, 3-dot pulse, and clean version/developer footer.
+  - Pure YouTube TV focus styling (borderless solid white pills + dark ink on focus, zero harsh outline borders).
+  - Full-bleed Hero backdrop starting right from the top edge behind a transparent floating top bar.
+  - Edge-to-edge poster rails with content-type badges (`MOVIE`, `SERIES`, `DOC`, `MUSIC`) and a custom framed portrait showcase inside the remote Menu Drawer.
 - **Smart Home Discovery, Live Filters & Voice Search**:
   - Curated parallel-loaded Home rails (Trending Movies, Top Rated Cinema, Trending Series, New Releases, Action Blockbusters) plus personalized **"Because You Watched..."** and **"More Like This"** rails on Detail pages.
   - Filter Home, Films, and Series live by Genre, Year, and Sort (`Trending`, `Latest`, `2026`, `2025`).
@@ -28,7 +27,7 @@ Developed by **Auris Daniel** ([@daniel-17gr](https://github.com/daniel-17gr)).
   - In-player **Episodes & Seasons** drawer, floating **Next Episode** pill in the final 45s, and 10-second Up Next autoplay.
   - **Sleep Timer** (`Off`, `15m`, `30m`, `45m`, `1h`, `1h 30m`, `2h`, `3h`, `4h`), Speed (`0.5x–2.0x`), Quality & Decoder Mode, and Aspect Ratio (`Fit / Zoom / Stretch`).
 - **TV Remote Quick Menu & GitHub Update Check**: Press `MENU` anywhere for instant navigation, catalog refresh, sleep timer, language toggle (`English` / `Français`), or check for newer releases directly from **Settings → About**.
-- **Performance Tuned for Android TV**: Parallel API loading with 10-minute in-memory TTL caching, OkHttp connection pooling, hardware-bitmap Coil `RGB_565` caching, hoisted gradient/border/shape allocations, `@Immutable` state models, and 160ms Hero focus debouncing.
+- **Optimized for Low-RAM Android TV**: R8 code & resource shrinking, zero-relayout overlay navigation rail, isolated timer/hero state flows, lean 10% RAM Coil `RGB_565` image cache with `onTrimMemory` eviction, parallel API loading, and 10-minute TTL caching.
 
 ---
 

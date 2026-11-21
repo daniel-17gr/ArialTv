@@ -1,6 +1,5 @@
 package com.example.arialtv.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +30,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.example.arialtv.R
-import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -97,11 +95,8 @@ fun ExitConfirmationDialog(
                         focusedContainerColor = PureWhite,
                         focusedContentColor = InkOnWhite,
                     ),
-                    border = ClickableSurfaceDefaults.border(
-                        border = Border.None,
-                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = pillShape),
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                 ) {
                     Text(
                         text = "Stay",
@@ -119,11 +114,8 @@ fun ExitConfirmationDialog(
                         focusedContainerColor = SignalRed,
                         focusedContentColor = PureWhite,
                     ),
-                    border = ClickableSurfaceDefaults.border(
-                        border = Border.None,
-                        focusedBorder = Border(BorderStroke(2.dp, FocusBorderWhite), shape = pillShape),
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                 ) {
                     Text(
                         text = "Exit",

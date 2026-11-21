@@ -1,6 +1,5 @@
 package com.example.arialtv.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -142,10 +141,10 @@ fun LibraryScreen(
 
                     LazyRow(
                         modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp),
+                        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        items(watchlist, key = { "wl_${it.id}" }) { item ->
+                        itemsIndexed(watchlist, key = { idx, it -> "wl_${idx}_${it.id}" }) { _, item ->
                             TvMediaCard(
                                 item = item,
                                 onClick = { onItemClick(item) },
@@ -170,10 +169,7 @@ private fun QuietActionPill(label: String, onClick: () -> Unit) {
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = Border.None,
-            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-        ),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
     ) {
         Text(

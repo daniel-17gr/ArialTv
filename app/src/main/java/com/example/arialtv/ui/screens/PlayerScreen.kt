@@ -10,11 +10,9 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -94,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -132,13 +131,11 @@ import com.example.arialtv.data.model.SubtitleStyle
 import com.example.arialtv.data.moviebox.MovieBoxConfig
 import com.example.arialtv.data.moviebox.SubtitleShiftHelper
 import com.example.arialtv.data.storage.AppPreferences
-import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
-import com.example.arialtv.ui.theme.SelectedBorderRed
 import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.SignalRedSoft
 import com.example.arialtv.ui.theme.StatusGreen
@@ -149,6 +146,7 @@ import com.example.arialtv.ui.theme.TrueBlack
 import com.example.arialtv.ui.viewmodel.AppDestination
 import com.example.arialtv.ui.viewmodel.PlayerUiState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -272,7 +270,7 @@ fun PlayerScreen(
     settings: AppSettings,
     episodeProgress: Map<String, EpisodeProgress>,
     sleepTimerMinutes: Int,
-    sleepTimerRemainingSec: Int,
+    sleepTimerRemainingSecFlow: StateFlow<Int>,
     sleepTimerExpired: Boolean,
     onSelectQuality: (Int) -> Unit,
     onSelectAudioDub: (String, Long) -> Unit,
@@ -1329,20 +1327,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    if (sleepTimerRemainingSec > 0) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(Color(0xC8141414))
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                        ) {
-                            Text(
-                                text = "SLEEP ${formatCountdown(sleepTimerRemainingSec)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = PureWhite,
-                            )
-                        }
-                    }
+                    PlayerSleepBadge(sleepTimerRemainingSecFlow = sleepTimerRemainingSecFlow)
                 }
 
                 // Bottom YouTube TV Transport Stack
@@ -1597,11 +1582,11 @@ fun PlayerScreen(
             )
         }
 
-        // Right Slide-Over Drawer (Episodes / Subtitles / Volume / Quality / Speed / Sleep)
+        // Right Slide-Over Drawer (fast 110ms fade for low-RAM TVs)
         AnimatedVisibility(
             visible = activeDrawer != PlayerDrawer.NONE && !modalBlockingStage,
-            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+            enter = fadeIn(tween(110)),
+            exit = fadeOut(tween(90)),
             modifier = Modifier.align(Alignment.CenterEnd),
         ) {
             Column(
@@ -1823,7 +1808,7 @@ fun PlayerScreen(
                                 contentPadding = PaddingValues(vertical = 6.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                items(seasons, key = { it.seasonNumber }) { se ->
+                                itemsIndexed(seasons, key = { idx, se -> "pse_${idx}_${se.seasonNumber}" }) { _, se ->
                                     val sel = se.seasonNumber == drawerSeason
                                     DrawerSmallChip(
                                         label = String.format(Locale.US, "S%02d", se.seasonNumber),
@@ -1968,7 +1953,7 @@ fun PlayerScreen(
                                     },
                                 )
                             }
-                            items(playback?.subtitles.orEmpty(), key = { it.id }) { sub ->
+                            itemsIndexed(playback?.subtitles.orEmpty(), key = { idx, sub -> "psub_${idx}_${sub.id}" }) { _, sub ->
                                 DrawerRow(
                                     title = sub.languageName,
                                     trailing = sub.languageCode.uppercase(),
@@ -2079,6 +2064,25 @@ fun PlayerScreen(
 }
 
 @Composable
+private fun PlayerSleepBadge(sleepTimerRemainingSecFlow: StateFlow<Int>) {
+    val sec by sleepTimerRemainingSecFlow.collectAsStateWithLifecycle()
+    if (sec > 0) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(Color(0xC8141414))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        ) {
+            Text(
+                text = "SLEEP ${formatCountdown(sec)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = PureWhite,
+            )
+        }
+    }
+}
+
+@Composable
 private fun PlayerCircleButton(
     icon: ImageVector,
     contentDescription: String,
@@ -2093,26 +2097,16 @@ private fun PlayerCircleButton(
         shape = ClickableSurfaceDefaults.shape(CircleShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = when {
-                primary -> PureWhite
+                primary -> Color(0x45FFFFFF)
                 active -> SurfaceSelected
-                else -> Color(0x30FFFFFF)
+                else -> Color(0x28FFFFFF)
             },
-            contentColor = when {
-                primary -> InkOnWhite
-                active -> PureWhite
-                else -> PureWhite
-            },
-            focusedContainerColor = if (primary) SignalRed else PureWhite,
-            focusedContentColor = if (primary) PureWhite else InkOnWhite,
+            contentColor = PureWhite,
+            focusedContainerColor = PureWhite,
+            focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (active && !primary) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = CircleShape) else Border.None,
-            focusedBorder = Border(
-                BorderStroke(2.dp, if (primary) FocusBorderWhite else SignalRed),
-                shape = CircleShape,
-            ),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.10f),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
     ) {
         Box(
             modifier = Modifier.size(if (primary) 48.dp else 40.dp),
@@ -2143,21 +2137,15 @@ private fun PlayerPillButton(
         shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = when {
-                primary -> PureWhite
+                primary -> Color(0x40FFFFFF)
                 active -> SurfaceSelected
-                else -> Color(0x30FFFFFF)
+                else -> Color(0x28FFFFFF)
             },
-            contentColor = if (primary) InkOnWhite else PureWhite,
-            focusedContainerColor = if (primary) SignalRed else PureWhite,
-            focusedContentColor = if (primary) PureWhite else InkOnWhite,
+            contentColor = PureWhite,
+            focusedContainerColor = PureWhite,
+            focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (active && !primary) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-            focusedBorder = Border(
-                BorderStroke(2.dp, if (primary) FocusBorderWhite else SignalRed),
-                shape = shape,
-            ),
-        ),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
     ) {
         Row(
@@ -2180,7 +2168,7 @@ private fun DrawerRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -2191,11 +2179,8 @@ private fun DrawerRow(
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
     ) {
         Row(
             modifier = Modifier
@@ -2234,10 +2219,7 @@ private fun DrawerSmallChip(
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-        ),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
     ) {
         Text(

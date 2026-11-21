@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,8 +24,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
@@ -63,12 +60,10 @@ import com.example.arialtv.ui.components.TvHeroBanner
 import com.example.arialtv.ui.components.TvMediaCard
 import com.example.arialtv.ui.components.TvMediaRail
 import com.example.arialtv.ui.theme.CanvasBlack
-import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
-import com.example.arialtv.ui.theme.SelectedBorderRed
 import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.SignalRedSoft
 import com.example.arialtv.ui.theme.SurfaceElevated
@@ -138,21 +133,31 @@ fun CatalogScreen(
             )
         }
         catalog != null -> {
-            val rawHeroItem = tabState.focusedItem
-                ?: catalog.featured.firstOrNull()
-                ?: catalog.rows.firstOrNull()?.items?.firstOrNull()
+            // Keep focused hero state local to CatalogScreen so D-pad browsing NEVER recomposes ArialTvApp!
+            val defaultHero = remember(catalog) {
+                catalog.featured.firstOrNull() ?: catalog.rows.firstOrNull()?.items?.firstOrNull()
+            }
+            var pendingHeroItem by remember(catalog) { mutableStateOf(tabState.focusedItem ?: defaultHero) }
+            var pendingCategory by remember(catalog) { mutableStateOf(tabState.focusedCategory) }
+            var displayedHeroItem by remember(catalog) { mutableStateOf(tabState.focusedItem ?: defaultHero) }
+            var displayedCategory by remember(catalog) { mutableStateOf(tabState.focusedCategory) }
 
-            // Debounce hero backdrop updates by 160ms so holding D-pad arrows stays silky 60fps
-            var displayedHeroItem by remember { mutableStateOf(rawHeroItem) }
-            var displayedCategory by remember { mutableStateOf(tabState.focusedCategory) }
-            LaunchedEffect(rawHeroItem?.id, tabState.focusedCategory) {
+            LaunchedEffect(tabState.focusedItem?.id) {
+                val vmFocus = tabState.focusedItem
+                if (vmFocus != null && vmFocus.id != pendingHeroItem?.id) {
+                    pendingHeroItem = vmFocus
+                    pendingCategory = tabState.focusedCategory
+                }
+            }
+
+            LaunchedEffect(pendingHeroItem?.id, pendingCategory) {
                 if (displayedHeroItem == null) {
-                    displayedHeroItem = rawHeroItem
-                    displayedCategory = tabState.focusedCategory
-                } else if (rawHeroItem != null) {
-                    delay(160L)
-                    displayedHeroItem = rawHeroItem
-                    displayedCategory = tabState.focusedCategory
+                    displayedHeroItem = pendingHeroItem
+                    displayedCategory = pendingCategory
+                } else if (pendingHeroItem != null) {
+                    delay(180L)
+                    displayedHeroItem = pendingHeroItem
+                    displayedCategory = pendingCategory
                 }
             }
 
@@ -181,8 +186,8 @@ fun CatalogScreen(
                     .fillMaxSize()
                     .background(CanvasBlack),
             ) {
-                // Hero banner (compact when actively viewing a filtered grid so more posters fit)
-                val hero = displayedHeroItem ?: rawHeroItem
+                // Full-bleed Hero starts right at y = 0 behind the transparent floating top bar!
+                val hero = displayedHeroItem ?: defaultHero
                 if (hero != null && !tabState.isFilterActive) {
                     TvHeroBanner(
                         item = hero,
@@ -191,25 +196,37 @@ fun CatalogScreen(
                         onPlayClick = { onPlayNow(hero) },
                         onDetailsClick = { onItemClick(hero) },
                         onToggleWatchlist = { onToggleWatchlist(hero) },
-                        onNextFeatured = if (catalog.featured.size > 1) onNextFeatured else null,
+                        onNextFeatured = if (catalog.featured.size > 1) {
+                            {
+                                val feat = catalog.featured
+                                val curIdx = feat.indexOfFirst { it.id == hero.id }
+                                val next = feat[(curIdx + 1) % feat.size]
+                                pendingHeroItem = next
+                                pendingCategory = "Featured"
+                                displayedHeroItem = next
+                                displayedCategory = "Featured"
+                                onNextFeatured?.invoke()
+                            }
+                        } else null,
                     )
                 }
 
-                // Live MovieBox API Filter Bar (All · Sort · Year · API Genres)
+                // Live MovieBox API Filter Bar (clears transparent top bar when Hero is hidden)
                 LiveFilterBar(
                     tabState = tabState,
                     genreOptions = genreOptions,
                     onApplyFilter = onApplyFilter,
                     onClearFilter = onClearFilter,
+                    modifier = if (tabState.isFilterActive) Modifier.padding(top = 56.dp) else Modifier,
                 )
 
                 if (tabState.isFilterActive) {
-                    // Filtered Results Grid powered live by MovieBox `/subject-api/list`
                     FilteredCatalogGrid(
                         tabState = tabState,
                         onItemClick = onItemClick,
                         onItemFocused = { item ->
-                            onItemFocused(item, tabState.focusedCategory)
+                            pendingHeroItem = item
+                            pendingCategory = tabState.focusedCategory
                         },
                         onLoadMore = onLoadMoreFiltered,
                         onClearFilter = onClearFilter,
@@ -223,8 +240,8 @@ fun CatalogScreen(
                             .fillMaxWidth()
                             .weight(1f)
                             .background(CanvasBlack),
-                        contentPadding = PaddingValues(top = 6.dp, bottom = 36.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 36.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         if (showPersonalRails && watchHistory.isNotEmpty()) {
                             item(key = "continue_watching", contentType = "cw_rail") {
@@ -232,7 +249,8 @@ fun CatalogScreen(
                                     entries = watchHistory,
                                     onEntryClick = onResumeProgress,
                                     onEntryFocused = { progress ->
-                                        onItemFocused(progress.item, "Continue Watching")
+                                        pendingHeroItem = progress.item
+                                        pendingCategory = "Continue Watching"
                                     },
                                 )
                             }
@@ -245,7 +263,8 @@ fun CatalogScreen(
                                     items = watchlist,
                                     onItemClick = onItemClick,
                                     onItemFocused = { item ->
-                                        onItemFocused(item, "My List")
+                                        pendingHeroItem = item
+                                        pendingCategory = "My List"
                                     },
                                 )
                             }
@@ -258,7 +277,8 @@ fun CatalogScreen(
                                     items = recommendedRow.items,
                                     onItemClick = onItemClick,
                                     onItemFocused = { item ->
-                                        onItemFocused(item, "Recommended")
+                                        pendingHeroItem = item
+                                        pendingCategory = "Recommended"
                                     },
                                 )
                             }
@@ -275,7 +295,8 @@ fun CatalogScreen(
                                 indexPrefix = idx + 1,
                                 onItemClick = onItemClick,
                                 onItemFocused = { focused ->
-                                    onItemFocused(focused, row.category)
+                                    pendingHeroItem = focused
+                                    pendingCategory = row.category
                                 },
                             )
                         }
@@ -292,76 +313,63 @@ private fun LiveFilterBar(
     genreOptions: List<CatalogFilterOption>,
     onApplyFilter: (genre: String, year: String, sort: String, country: String) -> Unit,
     onClearFilter: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = Modifier
+    LazyRow(
+        modifier = modifier
             .fillMaxWidth()
             .background(CanvasBlack),
+        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            item(key = "flt_all") {
-                CatalogFilterChip(
-                    label = "All",
-                    selected = !tabState.isFilterActive,
-                    onClick = onClearFilter,
-                )
-            }
-
-            items(QUICK_SORT_FILTERS, key = { "sort_${it.first}" }) { (sortKey, label) ->
-                val selected = tabState.activeSort == sortKey
-                CatalogFilterChip(
-                    label = label,
-                    selected = selected,
-                    onClick = {
-                        val nextSort = if (selected) "ForYou" else sortKey
-                        onApplyFilter(tabState.activeGenre, tabState.activeYear, nextSort, tabState.activeCountry)
-                    },
-                )
-            }
-
-            items(QUICK_YEAR_FILTERS, key = { "yr_$it" }) { yr ->
-                val selected = tabState.activeYear == yr
-                CatalogFilterChip(
-                    label = yr,
-                    selected = selected,
-                    onClick = {
-                        val nextYear = if (selected) "All" else yr
-                        onApplyFilter(tabState.activeGenre, nextYear, tabState.activeSort, tabState.activeCountry)
-                    },
-                )
-            }
-
-            items(genreOptions, key = { "gen_${it.genre}" }) { option ->
-                val selected = tabState.activeGenre.equals(option.genre, ignoreCase = true)
-                CatalogFilterChip(
-                    label = option.label,
-                    selected = selected,
-                    onClick = {
-                        val nextGenre = if (selected) "All" else option.genre
-                        onApplyFilter(nextGenre, tabState.activeYear, tabState.activeSort, option.country)
-                    },
-                )
-            }
+        item(key = "flt_all") {
+            CatalogFilterChip(
+                label = "All",
+                selected = !tabState.isFilterActive,
+                onClick = onClearFilter,
+            )
         }
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(36.dp)
-                .height(48.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(Color.Transparent, CanvasBlack.copy(alpha = 0.90f)),
-                    ),
-                ),
-        )
+        itemsIndexed(QUICK_SORT_FILTERS, key = { idx, it -> "sort_${idx}_${it.first}" }) { _, (sortKey, label) ->
+            val selected = tabState.activeSort == sortKey
+            CatalogFilterChip(
+                label = label,
+                selected = selected,
+                onClick = {
+                    val nextSort = if (selected) "ForYou" else sortKey
+                    onApplyFilter(tabState.activeGenre, tabState.activeYear, nextSort, tabState.activeCountry)
+                },
+            )
+        }
+
+        itemsIndexed(QUICK_YEAR_FILTERS, key = { idx, yr -> "yr_${idx}_$yr" }) { _, yr ->
+            val selected = tabState.activeYear == yr
+            CatalogFilterChip(
+                label = yr,
+                selected = selected,
+                onClick = {
+                    val nextYear = if (selected) "All" else yr
+                    onApplyFilter(tabState.activeGenre, nextYear, tabState.activeSort, tabState.activeCountry)
+                },
+            )
+        }
+
+        itemsIndexed(genreOptions, key = { idx, opt -> "gen_${idx}_${opt.genre}" }) { _, option ->
+            val selected = tabState.activeGenre.equals(option.genre, ignoreCase = true)
+            CatalogFilterChip(
+                label = option.label,
+                selected = selected,
+                onClick = {
+                    val nextGenre = if (selected) "All" else option.genre
+                    onApplyFilter(nextGenre, tabState.activeYear, tabState.activeSort, option.country)
+                },
+            )
+        }
     }
 }
+
+private val FilterChipShape = RoundedCornerShape(50)
 
 @Composable
 private fun CatalogFilterChip(
@@ -369,20 +377,16 @@ private fun CatalogFilterChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(50)
     Surface(
         onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(shape),
+        shape = ClickableSurfaceDefaults.shape(FilterChipShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceSelected else SurfaceTonal,
             contentColor = if (selected) PureWhite else InkSecondary,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-        ),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
     ) {
         Text(
@@ -433,20 +437,16 @@ private fun FilteredCatalogGrid(
                 color = InkSecondary,
             )
 
-            val pillShape = RoundedCornerShape(50)
             Surface(
                 onClick = onClearFilter,
-                shape = ClickableSurfaceDefaults.shape(pillShape),
+                shape = ClickableSurfaceDefaults.shape(FilterChipShape),
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = SurfaceTonal,
                     contentColor = InkSecondary,
                     focusedContainerColor = PureWhite,
                     focusedContentColor = InkOnWhite,
                 ),
-                border = ClickableSurfaceDefaults.border(
-                    border = Border.None,
-                    focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = pillShape),
-                ),
+                border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
             ) {
                 Row(
@@ -499,11 +499,11 @@ private fun FilteredCatalogGrid(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(
+                    itemsIndexed(
                         items = tabState.filteredItems,
-                        key = { "flt_${it.id}" },
-                        contentType = { "media_card" },
-                    ) { item ->
+                        key = { idx, it -> "flt_${idx}_${it.id}" },
+                        contentType = { _, _ -> "media_card" },
+                    ) { _, item ->
                         TvMediaCard(
                             item = item,
                             onClick = { onItemClick(item) },
@@ -521,20 +521,16 @@ private fun FilteredCatalogGrid(
                                     .padding(vertical = 10.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                val btnShape = RoundedCornerShape(50)
                                 Surface(
                                     onClick = onLoadMore,
-                                    shape = ClickableSurfaceDefaults.shape(btnShape),
+                                    shape = ClickableSurfaceDefaults.shape(FilterChipShape),
                                     colors = ClickableSurfaceDefaults.colors(
                                         containerColor = SurfaceSelected,
                                         contentColor = PureWhite,
                                         focusedContainerColor = PureWhite,
                                         focusedContentColor = InkOnWhite,
                                     ),
-                                    border = ClickableSurfaceDefaults.border(
-                                        border = Border(BorderStroke(1.dp, SelectedBorderRed), shape = btnShape),
-                                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = btnShape),
-                                    ),
+                                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                                     scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                                 ) {
                                     Text(
@@ -696,21 +692,17 @@ private fun CleanErrorState(
             )
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val pillShape = RoundedCornerShape(50)
                 Surface(
                     onClick = onRetry,
-                    shape = ClickableSurfaceDefaults.shape(pillShape),
+                    shape = ClickableSurfaceDefaults.shape(FilterChipShape),
                     colors = ClickableSurfaceDefaults.colors(
-                        containerColor = PureWhite,
-                        contentColor = InkOnWhite,
-                        focusedContainerColor = SignalRed,
-                        focusedContentColor = PureWhite,
+                        containerColor = SurfaceSelected,
+                        contentColor = PureWhite,
+                        focusedContainerColor = PureWhite,
+                        focusedContentColor = InkOnWhite,
                     ),
-                    border = ClickableSurfaceDefaults.border(
-                        border = Border.None,
-                        focusedBorder = Border(BorderStroke(2.dp, FocusBorderWhite), shape = pillShape),
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
@@ -723,18 +715,15 @@ private fun CleanErrorState(
                 }
                 Surface(
                     onClick = onOpenSettings,
-                    shape = ClickableSurfaceDefaults.shape(pillShape),
+                    shape = ClickableSurfaceDefaults.shape(FilterChipShape),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = SurfaceElevated,
                         contentColor = InkPrimary,
                         focusedContainerColor = PureWhite,
                         focusedContentColor = InkOnWhite,
                     ),
-                    border = ClickableSurfaceDefaults.border(
-                        border = Border.None,
-                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = pillShape),
-                    ),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),

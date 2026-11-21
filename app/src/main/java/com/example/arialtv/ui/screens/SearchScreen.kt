@@ -6,9 +6,7 @@ import android.speech.RecognizerIntent
 import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,8 +23,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -50,8 +48,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -75,7 +71,6 @@ import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
-import com.example.arialtv.ui.theme.SelectedBorderRed
 import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.SurfaceElevated
 import com.example.arialtv.ui.theme.SurfaceSelected
@@ -141,14 +136,7 @@ fun SearchScreen(
                     .weight(1f)
                     .height(50.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(SurfaceTonal)
-                    .then(
-                        if (inputFocused) {
-                            Modifier.border(2.dp, SignalRed, RoundedCornerShape(50))
-                        } else {
-                            Modifier
-                        },
-                    )
+                    .background(if (inputFocused) SurfaceSelected else SurfaceTonal)
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -208,11 +196,8 @@ fun SearchScreen(
                                 focusedContainerColor = PureWhite,
                                 focusedContentColor = InkOnWhite,
                             ),
-                            border = ClickableSurfaceDefaults.border(
-                                border = Border.None,
-                                focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = CircleShape),
-                            ),
-                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+                            border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                             modifier = Modifier.focusProperties { down = activeFilterRequester },
                         ) {
                             Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
@@ -241,11 +226,8 @@ fun SearchScreen(
                     focusedContainerColor = PureWhite,
                     focusedContentColor = InkOnWhite,
                 ),
-                border = ClickableSurfaceDefaults.border(
-                    border = Border.None,
-                    focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = CircleShape),
-                ),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+                border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
                 modifier = Modifier.focusProperties { down = activeFilterRequester },
             ) {
                 Box(
@@ -267,10 +249,7 @@ fun SearchScreen(
                     focusedContainerColor = PureWhite,
                     focusedContentColor = InkOnWhite,
                 ),
-                border = ClickableSurfaceDefaults.border(
-                    border = Border.None,
-                    focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = pillShape),
-                ),
+                border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                 modifier = Modifier.focusProperties { down = activeFilterRequester },
             ) {
@@ -367,7 +346,7 @@ fun SearchScreen(
                         )
                     }
 
-                    items(matchingHistory, key = { "mh_$it" }, contentType = { "query_row" }) { past ->
+                    itemsIndexed(matchingHistory, key = { idx, past -> "mh_${idx}_$past" }, contentType = { _, _ -> "query_row" }) { _, past ->
                         SuggestionQueryRow(
                             query = past,
                             isHistory = true,
@@ -375,7 +354,7 @@ fun SearchScreen(
                         )
                     }
 
-                    items(searchState.suggestions, key = { "sug_${it.id}" }, contentType = { "title_row" }) { item ->
+                    itemsIndexed(searchState.suggestions, key = { idx, item -> "sug_${idx}_${item.id}" }, contentType = { _, _ -> "title_row" }) { _, item ->
                         LiveTitleSuggestionRow(
                             item = item,
                             onClick = { onItemClick(item) },
@@ -430,7 +409,7 @@ fun SearchScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(searchState.results, key = { "sr_${it.id}" }, contentType = { "media_card" }) { item ->
+                    itemsIndexed(searchState.results, key = { idx, it -> "sr_${idx}_${it.id}" }, contentType = { _, _ -> "media_card" }) { _, item ->
                         TvMediaCard(
                             item = item,
                             onClick = { onItemClick(item) },
@@ -481,10 +460,7 @@ fun SearchScreen(
                                             focusedContainerColor = PureWhite,
                                             focusedContentColor = InkOnWhite,
                                         ),
-                                        border = ClickableSurfaceDefaults.border(
-                                            border = Border.None,
-                                            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = clearShape),
-                                        ),
+                                        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                                         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                                     ) {
                                         Text(
@@ -523,7 +499,7 @@ fun SearchScreen(
                                     contentPadding = PaddingValues(horizontal = 32.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
-                                    items(searchState.trendingTerms, key = { "tt_$it" }) { term ->
+                                    itemsIndexed(searchState.trendingTerms, key = { idx, t -> "tt_${idx}_$t" }) { _, term ->
                                         SearchFilterChip(label = term, selected = false) {
                                             onSearchSubmit(term)
                                         }
@@ -533,7 +509,7 @@ fun SearchScreen(
                         }
                     }
 
-                    // Live API Trending Titles from `/subject-api/search-rank` (edge-to-edge LazyRow + soft right fade)
+                    // Live API Trending Titles from `/subject-api/search-rank` (edge-to-edge LazyRow)
                     if (filteredTrending.isNotEmpty()) {
                         item(key = "api_trending_titles") {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -543,30 +519,17 @@ fun SearchScreen(
                                     color = InkSecondary,
                                     modifier = Modifier.padding(horizontal = 32.dp),
                                 )
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    LazyRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                    ) {
-                                        items(filteredTrending, key = { "tr_${it.id}" }, contentType = { "media_card" }) { item ->
-                                            TvMediaCard(
-                                                item = item,
-                                                onClick = { onItemClick(item) },
-                                            )
-                                        }
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(horizontal = 32.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                ) {
+                                    itemsIndexed(filteredTrending, key = { idx, item -> "tr_${idx}_${item.id}" }, contentType = { _, _ -> "media_card" }) { _, item ->
+                                        TvMediaCard(
+                                            item = item,
+                                            onClick = { onItemClick(item) },
+                                        )
                                     }
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.CenterEnd)
-                                            .width(42.dp)
-                                            .height(248.dp)
-                                            .background(
-                                                Brush.horizontalGradient(
-                                                    colors = listOf(Color.Transparent, CanvasBlack.copy(alpha = 0.88f)),
-                                                ),
-                                            ),
-                                    )
                                 }
                             }
                         }
@@ -610,10 +573,7 @@ private fun SearchFilterChip(
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (selected) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-        ),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
     ) {
         Text(
@@ -630,7 +590,7 @@ private fun SuggestionQueryRow(
     isHistory: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(shape),
@@ -640,11 +600,8 @@ private fun SuggestionQueryRow(
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = Border.None,
-            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -681,7 +638,7 @@ private fun LiveTitleSuggestionRow(
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(shape),
@@ -691,11 +648,8 @@ private fun LiveTitleSuggestionRow(
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = Border.None,
-            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = shape),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -709,15 +663,15 @@ private fun LiveTitleSuggestionRow(
                 modifier = Modifier
                     .width(38.dp)
                     .height(54.dp)
-                    .clip(RoundedCornerShape(7.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(SurfaceElevated),
             ) {
                 if (item.posterUrl.isNotBlank()) {
                     val req = remember(item.posterUrl) {
                         ImageRequest.Builder(context)
                             .data(item.posterUrl)
-                            .size(120, 170)
-                            .crossfade(150)
+                            .size(96, 136)
+                            .crossfade(false)
                             .build()
                     }
                     AsyncImage(
@@ -760,7 +714,7 @@ private fun RecentHistoryRow(
     onSelect: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val rowShape = RoundedCornerShape(12.dp)
+    val rowShape = RoundedCornerShape(10.dp)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -775,11 +729,8 @@ private fun RecentHistoryRow(
                 focusedContainerColor = PureWhite,
                 focusedContentColor = InkOnWhite,
             ),
-            border = ClickableSurfaceDefaults.border(
-                border = Border.None,
-                focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = rowShape),
-            ),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
+            border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
             modifier = Modifier.weight(1f),
         ) {
             Row(
@@ -806,11 +757,8 @@ private fun RecentHistoryRow(
                 focusedContainerColor = SignalRed,
                 focusedContentColor = PureWhite,
             ),
-            border = ClickableSurfaceDefaults.border(
-                border = Border.None,
-                focusedBorder = Border(BorderStroke(2.dp, PureWhite), shape = CircleShape),
-            ),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+            border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         ) {
             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.Close, contentDescription = "Remove", modifier = Modifier.size(17.dp))

@@ -1,11 +1,9 @@
 package com.example.arialtv.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,8 +39,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -58,22 +58,32 @@ import com.example.arialtv.R
 import com.example.arialtv.data.model.AppMetadata
 import com.example.arialtv.data.model.CatalogLanguage
 import com.example.arialtv.ui.theme.DividerHairline
-import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
-import com.example.arialtv.ui.theme.SelectedBorderRed
+import com.example.arialtv.ui.theme.RailOverlayBg
 import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.SurfaceSelected
 import com.example.arialtv.ui.viewmodel.TvNavTab
 import kotlinx.coroutines.delay
 
+private val DrawerCardShape = RoundedCornerShape(14.dp)
+private val DrawerRowShape = RoundedCornerShape(10.dp)
+private val DrawerArtBottomFade = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.0f to Color.Transparent,
+        0.55f to Color(0x350F0F0F),
+        1.0f to Color(0xEE121212),
+    ),
+)
+
 /**
- * Triggered when the user presses the MENU button on their Android TV remote.
- * Offers instant 1-click access to navigation, refresh, sleep timer, language toggle, exit,
- * and developer credit at the bottom.
+ * Lightweight, snappy remote MENU Drawer:
+ * - Features the user's framed portrait artwork as an editorial top showcase card (NOT stretched in bg).
+ * - Fast 110ms fade (no heavy dual slide+fade lag on low-RAM TVs).
+ * - Pure YouTube TV focus (solid white pill fill + dark ink, zero colored outlines).
  */
 @Composable
 fun QuickMenuOverlay(
@@ -91,68 +101,82 @@ fun QuickMenuOverlay(
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(visible) {
         if (visible) {
-            delay(70)
+            delay(50)
             runCatching { firstFocus.requestFocus() }
         }
     }
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut(),
+        enter = fadeIn(tween(110)),
+        exit = fadeOut(tween(90)),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0x99000000))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss,
-                ),
-        )
-    }
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x99000000))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss,
+                    ),
+            )
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) {
             Column(
                 modifier = Modifier
+                    .align(Alignment.CenterEnd)
                     .fillMaxHeight()
-                    .width(326.dp)
-                    .background(Color(0xF7111111))
+                    .width(324.dp)
+                    .background(RailOverlayBg)
                     .statusBarsPadding()
-                    .padding(horizontal = 22.dp, vertical = 20.dp),
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Clean Brand Header (no profile avatar, no decorative red dot)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                // Editorial Showcase Card featuring the user's portrait artwork cleanly framed
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(148.dp)
+                        .clip(DrawerCardShape),
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.arial_tv_logo_dark),
-                        contentDescription = "arial tv.",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.height(21.dp),
+                        painter = painterResource(id = R.drawable.menu_drawer_art),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.TopCenter,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                    Text(
-                        text = "MENU",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = InkMuted,
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(DrawerArtBottomFade),
                     )
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.arial_tv_logo_dark),
+                            contentDescription = "arial tv.",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.height(19.dp),
+                        )
+                        Text(
+                            text = "v${AppMetadata.VERSION_NAME}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = InkSecondary,
+                        )
+                    }
                 }
-
-                Box(Modifier.fillMaxWidth().height(1.dp).background(DividerHairline))
 
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     item {
                         QuickMenuItem(
@@ -198,12 +222,8 @@ fun QuickMenuOverlay(
 
                     item {
                         Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "ACTIONS",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = InkMuted,
-                            modifier = Modifier.padding(start = 12.dp, bottom = 4.dp),
-                        )
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(DividerHairline))
+                        Spacer(Modifier.height(6.dp))
                     }
 
                     item {
@@ -239,7 +259,7 @@ fun QuickMenuOverlay(
                         )
                     }
                     item {
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(4.dp))
                         QuickMenuItem(
                             label = "Exit Arial TV",
                             icon = Icons.AutoMirrored.Rounded.ExitToApp,
@@ -249,13 +269,13 @@ fun QuickMenuOverlay(
                     }
                 }
 
-                // Bottom Developer Credit & GitHub Footer
+                // Clean Bottom Developer Credit & GitHub Footer
                 Box(Modifier.fillMaxWidth().height(1.dp).background(DividerHairline))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                        .padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
                         text = "Developed by ${AppMetadata.DEVELOPER_NAME}",
@@ -265,7 +285,7 @@ fun QuickMenuOverlay(
                     Text(
                         text = AppMetadata.GITHUB_HANDLE,
                         style = MaterialTheme.typography.labelSmall,
-                        color = InkSecondary,
+                        color = InkMuted,
                     )
                 }
             }
@@ -283,11 +303,10 @@ private fun QuickMenuItem(
     active: Boolean = false,
     destructive: Boolean = false,
 ) {
-    val shape = RoundedCornerShape(12.dp)
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
-        shape = ClickableSurfaceDefaults.shape(shape),
+        shape = ClickableSurfaceDefaults.shape(DrawerRowShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (active) SurfaceSelected else Color.Transparent,
             contentColor = when {
@@ -298,19 +317,13 @@ private fun QuickMenuItem(
             focusedContainerColor = if (destructive) SignalRed else PureWhite,
             focusedContentColor = if (destructive) PureWhite else InkOnWhite,
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (active) Border(BorderStroke(1.5.dp, SelectedBorderRed), shape = shape) else Border.None,
-            focusedBorder = Border(
-                BorderStroke(2.dp, if (destructive) FocusBorderWhite else SignalRed),
-                shape = shape,
-            ),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.01f),
+        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 11.dp),
+                .padding(horizontal = 13.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -325,7 +338,6 @@ private fun QuickMenuItem(
                 Text(
                     text = trailing,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (active) SignalRed else InkMuted,
                 )
             }
         }
