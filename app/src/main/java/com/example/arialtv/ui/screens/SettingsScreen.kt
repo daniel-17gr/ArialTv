@@ -71,6 +71,7 @@ import com.example.arialtv.data.model.SubtitleStyle
 import com.example.arialtv.ui.theme.CanvasBlack
 import com.example.arialtv.ui.theme.DividerHairline
 import com.example.arialtv.ui.theme.InkMuted
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -158,7 +159,7 @@ fun SettingsScreen(
                                 shape = ClickableSurfaceDefaults.shape(shape),
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = if (selected) SurfaceSelected else Color.Transparent,
-                                    contentColor = if (selected) PureWhite else InkSecondary,
+                                    contentColor = if (selected) InkOnSelected else InkSecondary,
                                     focusedContainerColor = PureWhite,
                                     focusedContentColor = InkOnWhite,
                                 ),
@@ -528,7 +529,7 @@ private fun SettingsSectionDetail(
                                         .fillMaxWidth()
                                         .height(44.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(if (urlInputFocused) SurfaceSelected else CanvasBlack)
+                                        .background(if (urlInputFocused) SurfaceElevated else CanvasBlack)
                                         .padding(horizontal = 14.dp),
                                     contentAlignment = Alignment.CenterStart,
                                 ) {
@@ -704,7 +705,7 @@ private fun SettingsPill(
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceSelected else SurfaceElevated,
             contentColor = when {
-                selected -> PureWhite
+                selected -> InkOnSelected
                 destructive -> InkPrimary
                 else -> InkSecondary
             },

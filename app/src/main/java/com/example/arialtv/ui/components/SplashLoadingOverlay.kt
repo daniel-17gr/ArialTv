@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -34,12 +36,20 @@ import androidx.tv.material3.Text
 import com.example.arialtv.R
 import com.example.arialtv.data.model.AppMetadata
 import com.example.arialtv.ui.theme.CanvasBlack
-import com.example.arialtv.ui.theme.InkMuted
+import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
 
+private val SplashScrim = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.0f to Color(0x280A0A0A),
+        0.48f to Color(0x550A0A0A),
+        0.78f to Color(0xCC0A0A0A),
+        1.0f to Color(0xF50A0A0A),
+    ),
+)
+
 /**
- * Simple, lightweight YouTube TV–style launch screen:
- * - Solid dark canvas (zero heavy glows/gradients).
+ * Simple, clean YouTube TV–style launch screen backed by the user's custom artwork:
  * - Crisp `arial tv.` logo + 3 subtle minimal pulsing dots.
  * - Quiet small footer with version and developer credit.
  */
@@ -58,31 +68,44 @@ fun SplashLoadingOverlay(
                 .fillMaxSize()
                 .background(CanvasBlack),
         ) {
+            Image(
+                painter = painterResource(id = R.drawable.splash_bg),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(SplashScrim),
+            )
+
             Column(
-                modifier = Modifier.align(Alignment.Center),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.arial_tv_logo_dark),
                     contentDescription = "arial tv.",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.height(38.dp),
+                    modifier = Modifier.height(34.dp),
                 )
 
                 SimpleDotsIndicator()
-            }
 
-            Text(
-                text = "v${AppMetadata.VERSION_NAME}  ·  ${AppMetadata.DEVELOPER_NAME}",
-                fontSize = 11.sp,
-                color = InkMuted,
-                letterSpacing = 0.6.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 24.dp),
-            )
+                Text(
+                    text = "v${AppMetadata.VERSION_NAME}  ·  ${AppMetadata.DEVELOPER_NAME}",
+                    fontSize = 11.sp,
+                    color = InkSecondary,
+                    letterSpacing = 0.6.sp,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
     }
 }

@@ -60,6 +60,7 @@ import com.example.arialtv.ui.components.TvHeroBanner
 import com.example.arialtv.ui.components.TvMediaCard
 import com.example.arialtv.ui.components.TvMediaRail
 import com.example.arialtv.ui.theme.CanvasBlack
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -382,7 +383,7 @@ private fun CatalogFilterChip(
         shape = ClickableSurfaceDefaults.shape(FilterChipShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceSelected else SurfaceTonal,
-            contentColor = if (selected) PureWhite else InkSecondary,
+            contentColor = if (selected) InkOnSelected else InkSecondary,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
@@ -525,7 +526,7 @@ private fun FilteredCatalogGrid(
                                     onClick = onLoadMore,
                                     shape = ClickableSurfaceDefaults.shape(FilterChipShape),
                                     colors = ClickableSurfaceDefaults.colors(
-                                        containerColor = SurfaceSelected,
+                                        containerColor = SurfaceElevated,
                                         contentColor = PureWhite,
                                         focusedContainerColor = PureWhite,
                                         focusedContentColor = InkOnWhite,
@@ -697,7 +698,7 @@ private fun CleanErrorState(
                     shape = ClickableSurfaceDefaults.shape(FilterChipShape),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = SurfaceSelected,
-                        contentColor = PureWhite,
+                        contentColor = InkOnSelected,
                         focusedContainerColor = PureWhite,
                         focusedContentColor = InkOnWhite,
                     ),

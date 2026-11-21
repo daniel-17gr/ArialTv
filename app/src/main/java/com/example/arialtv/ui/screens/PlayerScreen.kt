@@ -132,6 +132,7 @@ import com.example.arialtv.data.moviebox.MovieBoxConfig
 import com.example.arialtv.data.moviebox.SubtitleShiftHelper
 import com.example.arialtv.data.storage.AppPreferences
 import com.example.arialtv.ui.theme.InkMuted
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -2101,7 +2102,7 @@ private fun PlayerCircleButton(
                 active -> SurfaceSelected
                 else -> Color(0x28FFFFFF)
             },
-            contentColor = PureWhite,
+            contentColor = if (active && !primary) InkOnSelected else PureWhite,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
@@ -2141,7 +2142,7 @@ private fun PlayerPillButton(
                 active -> SurfaceSelected
                 else -> Color(0x28FFFFFF)
             },
-            contentColor = PureWhite,
+            contentColor = if (active && !primary) InkOnSelected else PureWhite,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
@@ -2175,7 +2176,7 @@ private fun DrawerRow(
         shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceSelected else Color.Transparent,
-            contentColor = if (selected) PureWhite else InkPrimary,
+            contentColor = if (selected) InkOnSelected else InkPrimary,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
@@ -2194,7 +2195,11 @@ private fun DrawerRow(
                 Text(
                     text = trailing,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (trailing == "WATCHED") StatusGreen else InkMuted,
+                    color = when {
+                        selected -> InkOnSelected.copy(alpha = 0.72f)
+                        trailing == "WATCHED" -> StatusGreen
+                        else -> InkMuted
+                    },
                 )
             }
         }
@@ -2215,7 +2220,7 @@ private fun DrawerSmallChip(
         shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceSelected else SurfaceElevated,
-            contentColor = if (selected) PureWhite else InkSecondary,
+            contentColor = if (selected) InkOnSelected else InkSecondary,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),

@@ -67,6 +67,7 @@ import com.example.arialtv.data.model.MediaItem
 import com.example.arialtv.ui.components.TvMediaCard
 import com.example.arialtv.ui.theme.CanvasBlack
 import com.example.arialtv.ui.theme.InkMuted
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -136,7 +137,7 @@ fun SearchScreen(
                     .weight(1f)
                     .height(50.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(if (inputFocused) SurfaceSelected else SurfaceTonal)
+                    .background(if (inputFocused) SurfaceElevated else SurfaceTonal)
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -569,7 +570,7 @@ private fun SearchFilterChip(
         shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceSelected else SurfaceTonal,
-            contentColor = if (selected) PureWhite else InkSecondary,
+            contentColor = if (selected) InkOnSelected else InkSecondary,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),

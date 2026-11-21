@@ -59,6 +59,7 @@ import com.example.arialtv.data.model.AppMetadata
 import com.example.arialtv.data.model.CatalogLanguage
 import com.example.arialtv.ui.theme.DividerHairline
 import com.example.arialtv.ui.theme.InkMuted
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -311,7 +312,7 @@ private fun QuickMenuItem(
             containerColor = if (active) SurfaceSelected else Color.Transparent,
             contentColor = when {
                 destructive -> SignalRed
-                active -> PureWhite
+                active -> InkOnSelected
                 else -> InkPrimary
             },
             focusedContainerColor = if (destructive) SignalRed else PureWhite,

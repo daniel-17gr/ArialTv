@@ -2,15 +2,16 @@ package com.example.arialtv.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Clean YouTube TV Monochrome Palette (Zero Colored Outlines)
+// Clean YouTube TV Monochrome + Warm Light-Orange Selected Palette (Zero Colored Outlines)
 val TrueBlack = Color(0xFF000000)
 val CanvasBlack = Color(0xFF0F0F0F)
 val RailSurface = Color(0xFF141414)
 val RailOverlayBg = Color(0xF5121212)
 val SurfaceTonal = Color(0xFF1F1F1F)
 val SurfaceElevated = Color(0xFF2A2A2A)
-val SurfaceSelected = Color(0xFF3A3A3A)
-val SurfaceHover = Color(0xFF424242)
+val SurfaceSelected = Color(0xFFFFE4CC) // Very light warm orange for selected containers
+val InkOnSelected = Color(0xFF000000)   // Crisp black foreground on light-orange selected bg
+val SurfaceHover = Color(0xFF383838)
 val DividerHairline = Color(0x1AFFFFFF)
 
 // Used strictly for the `tv.` brand mark, playback progress bars, and destructive focus actions

@@ -55,6 +55,7 @@ import com.example.arialtv.R
 import com.example.arialtv.data.model.CatalogLanguage
 import com.example.arialtv.ui.theme.CanvasBlack
 import com.example.arialtv.ui.theme.InkMuted
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -245,7 +246,7 @@ private fun RailNavItem(
         shape = ClickableSurfaceDefaults.shape(RailItemShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) SurfaceSelected else Color.Transparent,
-            contentColor = if (selected) PureWhite else InkSecondary,
+            contentColor = if (selected) InkOnSelected else InkSecondary,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
         ),
@@ -296,11 +297,12 @@ private fun FloatingTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.arial_tv_logo_dark),
-            contentDescription = "arial tv.",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.height(if (isCompact) 19.dp else 21.dp),
+        Text(
+            text = "developed by Auris",
+            style = MaterialTheme.typography.labelLarge,
+            fontSize = if (isCompact) 12.sp else 14.sp,
+            color = PureWhite,
+            letterSpacing = 0.3.sp,
         )
 
         Row(
@@ -446,7 +448,7 @@ private fun CompactBottomBar(
                 shape = ClickableSurfaceDefaults.shape(RailItemShape),
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = if (selected) SurfaceSelected else Color.Transparent,
-                    contentColor = if (selected) PureWhite else InkMuted,
+                    contentColor = if (selected) InkOnSelected else InkMuted,
                     focusedContainerColor = PureWhite,
                     focusedContentColor = InkOnWhite,
                 ),

@@ -55,6 +55,7 @@ import com.example.arialtv.data.storage.AppPreferences
 import com.example.arialtv.ui.components.TvMediaRail
 import com.example.arialtv.ui.theme.CanvasBlack
 import com.example.arialtv.ui.theme.InkMuted
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -355,7 +356,7 @@ fun DetailScreen(
                                 shape = ClickableSurfaceDefaults.shape(pillShape),
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = if (isInWatchlist) SurfaceSelected else SurfaceElevated,
-                                    contentColor = PureWhite,
+                                    contentColor = if (isInWatchlist) InkOnSelected else PureWhite,
                                     focusedContainerColor = PureWhite,
                                     focusedContentColor = InkOnWhite,
                                 ),
@@ -404,7 +405,7 @@ fun DetailScreen(
                                             shape = ClickableSurfaceDefaults.shape(dubShape),
                                             colors = ClickableSurfaceDefaults.colors(
                                                 containerColor = if (isCurrent) SurfaceSelected else SurfaceTonal,
-                                                contentColor = if (isCurrent) PureWhite else InkSecondary,
+                                                contentColor = if (isCurrent) InkOnSelected else InkSecondary,
                                                 focusedContainerColor = PureWhite,
                                                 focusedContentColor = InkOnWhite,
                                             ),
@@ -471,7 +472,7 @@ fun DetailScreen(
                                             shape = ClickableSurfaceDefaults.shape(seShape),
                                             colors = ClickableSurfaceDefaults.colors(
                                                 containerColor = if (selected) SurfaceSelected else SurfaceTonal,
-                                                contentColor = if (selected) PureWhite else InkSecondary,
+                                                contentColor = if (selected) InkOnSelected else InkSecondary,
                                                 focusedContainerColor = PureWhite,
                                                 focusedContentColor = InkOnWhite,
                                             ),

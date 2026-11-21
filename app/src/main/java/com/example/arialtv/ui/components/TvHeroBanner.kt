@@ -41,6 +41,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.arialtv.data.model.MediaItem
 import com.example.arialtv.ui.theme.CanvasBlack
+import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
 import com.example.arialtv.ui.theme.InkSecondary
@@ -227,7 +228,7 @@ fun TvHeroBanner(
                     shape = ClickableSurfaceDefaults.shape(CircleShape),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = if (isInWatchlist) SurfaceSelected else Color(0x22FFFFFF),
-                        contentColor = PureWhite,
+                        contentColor = if (isInWatchlist) InkOnSelected else PureWhite,
                         focusedContainerColor = PureWhite,
                         focusedContentColor = InkOnWhite,
                     ),

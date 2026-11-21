@@ -10,9 +10,9 @@ Developed by **Auris Daniel** ([@daniel-17gr](https://github.com/daniel-17gr)).
 
 - **10-Foot Android TV Experience**: Built with Jetpack Compose, Material 3 for TV (`androidx.tv:tv-material`), and collapsible YouTube TV–style left rail navigation.
 - **YouTube TV Clean Design**:
-  - Minimal, fast launch screen with `arial tv.` branding, 3-dot pulse, and clean version/developer footer.
-  - Pure YouTube TV focus styling (borderless solid white pills + dark ink on focus, zero harsh outline borders).
-  - Full-bleed Hero backdrop starting right from the top edge behind a transparent floating top bar.
+  - Custom widescreen launch screen artwork (`splash_bg.webp`) with `arial tv.` branding, 3-dot pulse, and clean version/developer footer.
+  - Pure YouTube TV focus (`#F1F1F1` white fill on focus) + warm light-orange (`#FFE4CC`) / black selected accent containers, with zero harsh outline borders.
+  - Full-bleed Hero backdrop starting right from the top edge behind a transparent `"developed by Auris"` top bar.
   - Edge-to-edge poster rails with content-type badges (`MOVIE`, `SERIES`, `DOC`, `MUSIC`) and a custom framed portrait showcase inside the remote Menu Drawer.
 - **Smart Home Discovery, Live Filters & Voice Search**:
   - Curated parallel-loaded Home rails (Trending Movies, Top Rated Cinema, Trending Series, New Releases, Action Blockbusters) plus personalized **"Because You Watched..."** and **"More Like This"** rails on Detail pages.
