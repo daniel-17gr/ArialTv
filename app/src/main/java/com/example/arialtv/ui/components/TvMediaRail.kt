@@ -27,6 +27,10 @@ import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkPrimary
 import java.util.Locale
 
+private val RailRightFadeBrush = Brush.horizontalGradient(
+    colors = listOf(Color.Transparent, CanvasBlack.copy(alpha = 0.88f)),
+)
+
 @Composable
 fun TvMediaRail(
     title: String,
@@ -86,11 +90,7 @@ fun TvMediaRail(
                     .align(Alignment.CenterEnd)
                     .width(42.dp)
                     .height(248.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(Color.Transparent, CanvasBlack.copy(alpha = 0.88f)),
-                        ),
-                    ),
+                    .background(RailRightFadeBrush),
             )
         }
     }
@@ -153,11 +153,7 @@ fun ContinueWatchingRail(
                     .align(Alignment.CenterEnd)
                     .width(42.dp)
                     .height(248.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(Color.Transparent, CanvasBlack.copy(alpha = 0.88f)),
-                        ),
-                    ),
+                    .background(RailRightFadeBrush),
             )
         }
     }

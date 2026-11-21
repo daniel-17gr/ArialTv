@@ -1,5 +1,7 @@
 package com.example.arialtv
 
+import com.example.arialtv.data.model.DubOption
+import com.example.arialtv.data.model.PreferredAudioLanguage
 import com.example.arialtv.data.model.PreferredCodec
 import com.example.arialtv.data.model.SeasonInfo
 import com.example.arialtv.data.model.StreamResource
@@ -101,5 +103,18 @@ class MovieBoxCryptoTest {
         val vtt = "WEBVTT\n\n00:01.200 --> 00:04.700\nLine\n"
         val shiftedVtt = SubtitleShiftHelper.shiftSubtitleText(vtt, 1000L)
         assertEquals("WEBVTT\n\n00:02.200 --> 00:05.700\nLine\n", shiftedVtt)
+    }
+
+    @Test
+    fun preferredAudioDubMatchingWorks() {
+        val dubs = listOf(
+            DubOption(subjectId = "100", languageName = "Original Audio", languageCode = "en", isOriginal = true),
+            DubOption(subjectId = "101", languageName = "Français", languageCode = "fr", isOriginal = false),
+            DubOption(subjectId = "102", languageName = "Español", languageCode = "es", isOriginal = false),
+        )
+        assertEquals("101", MediaRepository.findMatchingDub(dubs, PreferredAudioLanguage.FRENCH)?.subjectId)
+        assertEquals("102", MediaRepository.findMatchingDub(dubs, PreferredAudioLanguage.SPANISH)?.subjectId)
+        assertEquals(null, MediaRepository.findMatchingDub(dubs, PreferredAudioLanguage.ORIGINAL))
+        assertEquals(null, MediaRepository.findMatchingDub(dubs, PreferredAudioLanguage.ARABIC))
     }
 }

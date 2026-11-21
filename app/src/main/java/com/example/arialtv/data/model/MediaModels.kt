@@ -144,10 +144,31 @@ enum class AspectRatioMode(val id: String, val label: String) {
 }
 
 @Immutable
+enum class PreferredAudioLanguage(
+    val id: String,
+    val label: String,
+    val matchCode: String,
+) {
+    ORIGINAL("original", "Original", ""),
+    ENGLISH("en", "English", "en"),
+    FRENCH("fr", "Français", "fr"),
+    SPANISH("es", "Español", "es"),
+    ARABIC("ar", "Arabic", "ar"),
+    HINDI("hi", "Hindi", "hi"),
+    PORTUGUESE("pt", "Português", "pt");
+
+    companion object {
+        fun fromId(id: String?): PreferredAudioLanguage =
+            entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: ORIGINAL
+    }
+}
+
+@Immutable
 data class AppSettings(
     val connectionMode: ConnectionMode = ConnectionMode.STANDALONE_V3,
     val bridgeBaseUrl: String = "http://10.0.2.2:8000",
     val language: CatalogLanguage = CatalogLanguage.ENGLISH,
+    val preferredAudioLanguage: PreferredAudioLanguage = PreferredAudioLanguage.ORIGINAL,
     val preferredQuality: PreferredQuality = PreferredQuality.AUTO_BEST,
     val preferredCodec: PreferredCodec = PreferredCodec.AUTO_HARDWARE,
     val autoPlayNextEpisode: Boolean = true,
@@ -307,6 +328,8 @@ data class ResolvedPlayback(
     val availableStreams: List<StreamResource>,
     val subtitles: List<SubtitleTrack>,
     val sourceLabel: String,
+    val dubs: List<DubOption> = emptyList(),
+    val activeAudioLabel: String = "",
 )
 
 @Immutable
@@ -348,7 +371,7 @@ data class ConnectionTestResult(
 
 object AppMetadata {
     const val APP_NAME = "Arial TV"
-    const val VERSION_NAME = "1.2.0"
+    const val VERSION_NAME = "1.3.0"
     const val DEVELOPER_NAME = "Auris Daniel"
     const val GITHUB_HANDLE = "github.com/daniel-17gr"
     const val GITHUB_REPO_URL = "https://github.com/daniel-17gr/ArialTv"

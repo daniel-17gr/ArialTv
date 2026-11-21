@@ -62,6 +62,7 @@ import com.example.arialtv.data.model.AppSettings
 import com.example.arialtv.data.model.AspectRatioMode
 import com.example.arialtv.data.model.CatalogLanguage
 import com.example.arialtv.data.model.ConnectionMode
+import com.example.arialtv.data.model.PreferredAudioLanguage
 import com.example.arialtv.data.model.PreferredCodec
 import com.example.arialtv.data.model.PreferredQuality
 import com.example.arialtv.data.model.SubtitleBackground
@@ -89,7 +90,7 @@ private enum class SettingsSection(val label: String, val icon: ImageVector) {
     PLAYBACK("Playback", Icons.Rounded.PlayCircleOutline),
     SUBTITLES("Subtitles", Icons.Rounded.ClosedCaption),
     TIMERS("Timers", Icons.Rounded.Bedtime),
-    LANGUAGE("Language", Icons.Rounded.Language),
+    LANGUAGE("Audio & Lang", Icons.Rounded.Language),
     PRIVACY("History", Icons.Rounded.DeleteOutline),
     ADVANCED("Advanced", Icons.Rounded.Tune),
     ABOUT("About", Icons.Rounded.Info),
@@ -107,6 +108,7 @@ fun SettingsScreen(
     onModeChange: (ConnectionMode) -> Unit,
     onBridgeUrlChange: (String) -> Unit,
     onLanguageChange: (CatalogLanguage) -> Unit,
+    onPreferredAudioChange: (PreferredAudioLanguage) -> Unit,
     onQualityChange: (PreferredQuality) -> Unit,
     onCodecChange: (PreferredCodec) -> Unit,
     onAutoPlayNextChange: (Boolean) -> Unit,
@@ -194,6 +196,7 @@ fun SettingsScreen(
                         onModeChange = onModeChange,
                         onBridgeUrlChange = onBridgeUrlChange,
                         onLanguageChange = onLanguageChange,
+                        onPreferredAudioChange = onPreferredAudioChange,
                         onQualityChange = onQualityChange,
                         onCodecChange = onCodecChange,
                         onAutoPlayNextChange = onAutoPlayNextChange,
@@ -237,6 +240,7 @@ fun SettingsScreen(
                     onModeChange = onModeChange,
                     onBridgeUrlChange = onBridgeUrlChange,
                     onLanguageChange = onLanguageChange,
+                    onPreferredAudioChange = onPreferredAudioChange,
                     onQualityChange = onQualityChange,
                     onCodecChange = onCodecChange,
                     onAutoPlayNextChange = onAutoPlayNextChange,
@@ -273,6 +277,7 @@ private fun SettingsSectionDetail(
     onModeChange: (ConnectionMode) -> Unit,
     onBridgeUrlChange: (String) -> Unit,
     onLanguageChange: (CatalogLanguage) -> Unit,
+    onPreferredAudioChange: (PreferredAudioLanguage) -> Unit,
     onQualityChange: (PreferredQuality) -> Unit,
     onCodecChange: (PreferredCodec) -> Unit,
     onAutoPlayNextChange: (Boolean) -> Unit,
@@ -457,7 +462,25 @@ private fun SettingsSectionDetail(
 
             SettingsSection.LANGUAGE -> {
                 item {
-                    SettingGroup(title = "Catalog & Preferred Subtitles") {
+                    SettingGroup(
+                        title = "Preferred Audio Language",
+                        subtitle = "Automatically selects this dubbed audio language whenever a movie or series offers it.",
+                    ) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PreferredAudioLanguage.entries.forEach { audioLang ->
+                                SettingsPill(
+                                    label = audioLang.label,
+                                    selected = settings.preferredAudioLanguage == audioLang,
+                                ) { onPreferredAudioChange(audioLang) }
+                            }
+                        }
+                    }
+                }
+                item {
+                    SettingGroup(
+                        title = "Catalog & Preferred Subtitles",
+                        subtitle = "Controls catalog language and default subtitle language.",
+                    ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             CatalogLanguage.entries.forEach { lang ->
                                 SettingsPill(lang.label, settings.language == lang) { onLanguageChange(lang) }

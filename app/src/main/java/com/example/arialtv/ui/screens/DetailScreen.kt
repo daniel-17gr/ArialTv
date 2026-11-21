@@ -53,6 +53,7 @@ import com.example.arialtv.data.model.MediaItem
 import com.example.arialtv.data.model.SeasonInfo
 import com.example.arialtv.data.model.WatchProgress
 import com.example.arialtv.data.storage.AppPreferences
+import com.example.arialtv.ui.components.TvMediaRail
 import com.example.arialtv.ui.theme.CanvasBlack
 import com.example.arialtv.ui.theme.FocusBorderWhite
 import com.example.arialtv.ui.theme.InkMuted
@@ -83,6 +84,7 @@ fun DetailScreen(
     onPlay: (MediaItem, Int, Int, Boolean, List<SeasonInfo>, Int?) -> Unit,
     onSwitchDub: (String) -> Unit,
     onSelectSeason: (Int) -> Unit,
+    onOpenSimilar: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val details = detailState.details
@@ -392,15 +394,15 @@ fun DetailScreen(
                             }
                         }
 
-                        // Clean Audio / Dub Switcher
+                        // Enhanced Audio Language Switcher (shows active language & all available dubs)
                         val dubs = details?.dubs.orEmpty()
-                        if (dubs.size > 1) {
+                        if (dubs.isNotEmpty()) {
                             Column(
                                 modifier = Modifier.padding(top = 6.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(
-                                    text = "AUDIO",
+                                    text = if (dubs.size > 1) "AUDIO LANGUAGES  ·  ${dubs.size} AVAILABLE" else "AUDIO LANGUAGE",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = InkMuted,
                                 )
@@ -426,11 +428,23 @@ fun DetailScreen(
                                             ),
                                             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
                                         ) {
-                                            Text(
-                                                text = dub.languageName,
-                                                style = MaterialTheme.typography.labelLarge,
+                                            Row(
                                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                                            )
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                if (isCurrent) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Check,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(14.dp),
+                                                    )
+                                                }
+                                                Text(
+                                                    text = dub.languageName,
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -668,6 +682,18 @@ fun DetailScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // Live "More Like This" Recommendations Rail
+            if (detailState.similarItems.isNotEmpty()) {
+                item(key = "detail_similar", contentType = "media_rail") {
+                    TvMediaRail(
+                        title = "More Like This",
+                        items = detailState.similarItems,
+                        onItemClick = onOpenSimilar,
+                        onItemFocused = {},
+                    )
                 }
             }
         }

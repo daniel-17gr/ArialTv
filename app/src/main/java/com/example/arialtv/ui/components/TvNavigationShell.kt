@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -58,7 +59,9 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.example.arialtv.R
 import com.example.arialtv.data.model.AppMetadata
+import com.example.arialtv.data.model.CatalogLanguage
 import com.example.arialtv.ui.theme.CanvasBlack
+import com.example.arialtv.ui.theme.DividerHairline
 import com.example.arialtv.ui.theme.DotMatrixFont
 import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkOnWhite
@@ -83,11 +86,31 @@ import java.util.Locale
  * - On Compact screens (< 680dp): Banner-backed Top Header + Bottom Bar.
  * - Zero redundant tab titles, zero decorative red dots, zero profile clutter.
  */
+private val TopBarVerticalFade = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.0f to Color(0x360A0A0A),
+        0.48f to Color(0x780A0A0A),
+        0.86f to Color(0xE60A0A0A),
+        1.0f to CanvasBlack,
+    ),
+)
+
+private val TopBarHorizontalVignette = Brush.horizontalGradient(
+    colorStops = arrayOf(
+        0.0f to Color(0xBC0A0A0A),
+        0.24f to Color(0x220A0A0A),
+        0.74f to Color(0x280A0A0A),
+        1.0f to Color(0xBC0A0A0A),
+    ),
+)
+
 @Composable
 fun TvNavigationShell(
     activeTab: TvNavTab,
+    language: CatalogLanguage,
     sleepTimerRemainingSec: Int,
     onSelectTab: (TvNavTab) -> Unit,
+    onToggleLanguage: () -> Unit,
     onRefresh: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -199,9 +222,12 @@ fun TvNavigationShell(
                         .background(CanvasBlack),
                 ) {
                     BannerTopHeader(
+                        language = language,
                         sleepTimerRemainingSec = sleepTimerRemainingSec,
                         showLogo = !railFocused,
                         isCompact = false,
+                        onOpenSearch = { onSelectTab(TvNavTab.SEARCH) },
+                        onToggleLanguage = onToggleLanguage,
                         onRefresh = onRefresh,
                     )
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -213,9 +239,12 @@ fun TvNavigationShell(
             // Compact Layout
             Column(modifier = Modifier.fillMaxSize()) {
                 BannerTopHeader(
+                    language = language,
                     sleepTimerRemainingSec = sleepTimerRemainingSec,
                     showLogo = true,
                     isCompact = true,
+                    onOpenSearch = { onSelectTab(TvNavTab.SEARCH) },
+                    onToggleLanguage = onToggleLanguage,
                     onRefresh = onRefresh,
                 )
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -281,18 +310,24 @@ private fun RailNavItem(
 }
 
 /**
- * Top App Bar featuring the user's shared banner artwork at low opacity
- * with a smooth vertical fade down into CanvasBlack.
+ * Modern Architectural Top App Bar:
+ * - Features the user's shared banner artwork at low opacity fading smoothly into CanvasBlack.
+ * - Floating frosted-dark command capsule with Quick Search, Language toggle, Sleep Timer,
+ *   Refresh, and an isolated Nothing OS dot-matrix clock + date readout.
  */
 @Composable
 private fun BannerTopHeader(
+    language: CatalogLanguage,
     sleepTimerRemainingSec: Int,
     showLogo: Boolean,
     isCompact: Boolean,
+    onOpenSearch: () -> Unit,
+    onToggleLanguage: () -> Unit,
     onRefresh: () -> Unit,
 ) {
-    val headerHeight = if (isCompact) 58.dp else 64.dp
+    val headerHeight = if (isCompact) 60.dp else 70.dp
     val hPad = if (isCompact) 16.dp else 32.dp
+    val capsuleShape = remember { RoundedCornerShape(50) }
 
     Box(
         modifier = Modifier
@@ -306,38 +341,20 @@ private fun BannerTopHeader(
             painter = painterResource(id = R.drawable.auris_banner),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            alpha = 0.24f,
+            alpha = 0.28f,
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Smooth bottom fade into CanvasBlack + soft edge vignette for legibility
+        // Smooth bottom fade into CanvasBlack + soft side vignette (hoisted brushes)
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color(0x380A0A0A),
-                            0.45f to Color(0x780A0A0A),
-                            0.85f to Color(0xE00A0A0A),
-                            1.0f to CanvasBlack,
-                        ),
-                    ),
-                ),
+                .background(TopBarVerticalFade),
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color(0xB80A0A0A),
-                            0.25f to Color(0x280A0A0A),
-                            0.75f to Color(0x280A0A0A),
-                            1.0f to Color(0xB80A0A0A),
-                        ),
-                    ),
-                ),
+                .background(TopBarHorizontalVignette),
         )
 
         Row(
@@ -347,67 +364,127 @@ private fun BannerTopHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Left: `arial tv.` logo (hidden only while expanded rail already displays it)
+            // Left: Crisp `arial tv.` brand mark
             Box(contentAlignment = Alignment.CenterStart) {
                 if (showLogo) {
                     Image(
                         painter = painterResource(id = R.drawable.arial_tv_logo_dark),
                         contentDescription = "arial tv.",
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.height(if (isCompact) 20.dp else 22.dp),
+                        modifier = Modifier.height(if (isCompact) 21.dp else 24.dp),
                     )
                 }
             }
 
-            // Right: Sleep timer pill (only if active) + Refresh + Dot-Matrix Clock
+            // Right: Modern Frosted Command Capsule
             Row(
+                modifier = Modifier
+                    .clip(capsuleShape)
+                    .background(Color(0xC4121212))
+                    .border(1.dp, Color(0x20FFFFFF), capsuleShape)
+                    .padding(horizontal = if (isCompact) 8.dp else 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 6.dp else 8.dp),
             ) {
                 if (sleepTimerRemainingSec > 0) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(Color(0xCC1A1A1A))
-                            .padding(horizontal = 11.dp, vertical = 5.dp),
+                            .clip(capsuleShape)
+                            .background(Color(0x30E11D25))
+                            .border(1.dp, SelectedBorderRed, capsuleShape)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                     ) {
                         Text(
                             text = "SLEEP ${formatTimerRemaining(sleepTimerRemainingSec)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = InkPrimary,
+                            color = PureWhite,
                         )
                     }
                 }
 
+                // Quick Search Icon Button
+                if (!isCompact) {
+                    TopBarCircleIcon(
+                        icon = Icons.Rounded.Search,
+                        contentDescription = "Search",
+                        onClick = onOpenSearch,
+                    )
+                }
+
+                // Quick Language Switcher Pill (`EN` / `FR`)
                 Surface(
-                    onClick = onRefresh,
-                    shape = ClickableSurfaceDefaults.shape(CircleShape),
+                    onClick = onToggleLanguage,
+                    shape = ClickableSurfaceDefaults.shape(capsuleShape),
                     colors = ClickableSurfaceDefaults.colors(
-                        containerColor = Color(0xB01A1A1A),
+                        containerColor = Color(0x22FFFFFF),
                         contentColor = InkPrimary,
                         focusedContainerColor = PureWhite,
                         focusedContentColor = InkOnWhite,
                     ),
                     border = ClickableSurfaceDefaults.border(
                         border = Border.None,
-                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = CircleShape),
+                        focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = capsuleShape),
                     ),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
                 ) {
-                    Box(
-                        modifier = Modifier.size(if (isCompact) 32.dp else 34.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = "Refresh",
-                            modifier = Modifier.size(17.dp),
-                        )
-                    }
+                    Text(
+                        text = language.code.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
                 }
+
+                // Quick Refresh Button
+                TopBarCircleIcon(
+                    icon = Icons.Rounded.Refresh,
+                    contentDescription = "Refresh",
+                    onClick = onRefresh,
+                )
+
+                // Hairline separator
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(18.dp)
+                        .background(DividerHairline),
+                )
 
                 LiveClockText(isCompact = isCompact)
             }
+        }
+    }
+}
+
+@Composable
+private fun TopBarCircleIcon(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(CircleShape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0x1EFFFFFF),
+            contentColor = InkPrimary,
+            focusedContainerColor = PureWhite,
+            focusedContentColor = InkOnWhite,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border.None,
+            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = CircleShape),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+    ) {
+        Box(
+            modifier = Modifier.size(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
@@ -418,19 +495,36 @@ private fun BannerTopHeader(
 @Composable
 private fun LiveClockText(isCompact: Boolean) {
     var timeText by remember { mutableStateOf(currentClockString()) }
+    var dateText by remember { mutableStateOf(currentDateString()) }
     LaunchedEffect(Unit) {
         while (true) {
             timeText = currentClockString()
+            dateText = currentDateString()
             delay(15_000L)
         }
     }
-    Text(
-        text = timeText,
-        fontFamily = DotMatrixFont,
-        fontSize = if (isCompact) 13.sp else 15.sp,
-        color = InkPrimary,
-        letterSpacing = 1.2.sp,
-    )
+    Row(
+        modifier = Modifier.padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (!isCompact) {
+            Text(
+                text = dateText,
+                fontFamily = DotMatrixFont,
+                fontSize = 10.sp,
+                color = InkSecondary,
+                letterSpacing = 1.sp,
+            )
+        }
+        Text(
+            text = timeText,
+            fontFamily = DotMatrixFont,
+            fontSize = if (isCompact) 13.sp else 15.sp,
+            color = PureWhite,
+            letterSpacing = 1.2.sp,
+        )
+    }
 }
 
 @Composable
@@ -487,6 +581,9 @@ private fun CompactBottomBar(
 
 private fun currentClockString(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+
+private fun currentDateString(): String =
+    SimpleDateFormat("EEE dd MMM", Locale.getDefault()).format(Date()).uppercase(Locale.getDefault())
 
 private fun formatTimerRemaining(sec: Int): String {
     val h = sec / 3600

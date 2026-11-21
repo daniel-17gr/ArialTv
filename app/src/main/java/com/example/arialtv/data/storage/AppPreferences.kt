@@ -8,6 +8,7 @@ import com.example.arialtv.data.model.CatalogLanguage
 import com.example.arialtv.data.model.ConnectionMode
 import com.example.arialtv.data.model.EpisodeProgress
 import com.example.arialtv.data.model.MediaItem
+import com.example.arialtv.data.model.PreferredAudioLanguage
 import com.example.arialtv.data.model.PreferredCodec
 import com.example.arialtv.data.model.PreferredQuality
 import com.example.arialtv.data.model.SubtitleBackground
@@ -27,6 +28,7 @@ class AppPreferences(context: Context) {
         connectionMode = ConnectionMode.fromId(prefs.getString(KEY_MODE, null)),
         bridgeBaseUrl = prefs.getString(KEY_BRIDGE_URL, "http://10.0.2.2:8000") ?: "http://10.0.2.2:8000",
         language = CatalogLanguage.fromCode(prefs.getString(KEY_LANGUAGE, null)),
+        preferredAudioLanguage = PreferredAudioLanguage.fromId(prefs.getString(KEY_AUDIO_LANGUAGE, null)),
         preferredQuality = PreferredQuality.fromResolution(prefs.getInt(KEY_QUALITY, 2160)),
         preferredCodec = PreferredCodec.fromId(prefs.getString(KEY_CODEC, null)),
         autoPlayNextEpisode = prefs.getBoolean(KEY_AUTOPLAY_NEXT, true),
@@ -47,6 +49,7 @@ class AppPreferences(context: Context) {
             .putString(KEY_MODE, settings.connectionMode.id)
             .putString(KEY_BRIDGE_URL, settings.bridgeBaseUrl.trim())
             .putString(KEY_LANGUAGE, settings.language.code)
+            .putString(KEY_AUDIO_LANGUAGE, settings.preferredAudioLanguage.id)
             .putInt(KEY_QUALITY, settings.preferredQuality.resolution)
             .putString(KEY_CODEC, settings.preferredCodec.id)
             .putBoolean(KEY_AUTOPLAY_NEXT, settings.autoPlayNextEpisode)
@@ -276,6 +279,7 @@ class AppPreferences(context: Context) {
         private const val KEY_MODE = "connection_mode"
         private const val KEY_BRIDGE_URL = "bridge_base_url"
         private const val KEY_LANGUAGE = "catalog_language"
+        private const val KEY_AUDIO_LANGUAGE = "preferred_audio_language"
         private const val KEY_QUALITY = "preferred_quality"
         private const val KEY_CODEC = "preferred_codec"
         private const val KEY_AUTOPLAY_NEXT = "autoplay_next_ep"

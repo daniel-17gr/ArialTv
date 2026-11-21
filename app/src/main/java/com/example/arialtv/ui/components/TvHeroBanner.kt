@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -52,6 +54,24 @@ import com.example.arialtv.ui.theme.SelectedBorderRed
 import com.example.arialtv.ui.theme.SignalRed
 import com.example.arialtv.ui.theme.SurfaceSelected
 
+private val HeroVerticalFade = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.0f to Color(0x500A0A0A),
+        0.42f to Color(0x880A0A0A),
+        0.86f to Color(0xEE0A0A0A),
+        1.0f to CanvasBlack,
+    ),
+)
+
+private val HeroHorizontalFade = Brush.horizontalGradient(
+    colorStops = arrayOf(
+        0.0f to CanvasBlack,
+        0.40f to Color(0xCC0A0A0A),
+        0.74f to Color(0x280A0A0A),
+        1.0f to Color.Transparent,
+    ),
+)
+
 @Composable
 fun TvHeroBanner(
     item: MediaItem,
@@ -60,6 +80,7 @@ fun TvHeroBanner(
     onPlayClick: () -> Unit,
     onDetailsClick: () -> Unit,
     onToggleWatchlist: () -> Unit,
+    onNextFeatured: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -73,16 +94,19 @@ fun TvHeroBanner(
         // Full-bleed crossfading backdrop sized cleanly for TV performance
         Crossfade(
             targetState = item.effectiveBackdropUrl,
-            animationSpec = tween(durationMillis = 360),
+            animationSpec = tween(durationMillis = 320),
             label = "heroBackdrop",
         ) { backdropUrl ->
             if (backdropUrl.isNotBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
+                val request = remember(backdropUrl) {
+                    ImageRequest.Builder(context)
                         .data(backdropUrl)
                         .size(960, 540)
                         .crossfade(true)
-                        .build(),
+                        .build()
+                }
+                AsyncImage(
+                    model = request,
                     contentDescription = item.title,
                     contentScale = ContentScale.Crop,
                     alpha = 0.72f,
@@ -93,34 +117,16 @@ fun TvHeroBanner(
             }
         }
 
-        // Cinema-grade vertical + horizontal fade directly into CanvasBlack
+        // Cinema-grade vertical + horizontal fade directly into CanvasBlack (hoisted brushes)
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color(0x500A0A0A),
-                            0.42f to Color(0x880A0A0A),
-                            0.86f to Color(0xEE0A0A0A),
-                            1.0f to CanvasBlack,
-                        ),
-                    ),
-                ),
+                .background(HeroVerticalFade),
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colorStops = arrayOf(
-                            0.0f to CanvasBlack,
-                            0.40f to Color(0xCC0A0A0A),
-                            0.74f to Color(0x280A0A0A),
-                            1.0f to Color.Transparent,
-                        ),
-                    ),
-                ),
+                .background(HeroHorizontalFade),
         )
 
         // Editorial metadata & high-contrast YouTube TV action row
@@ -273,6 +279,36 @@ fun TvHeroBanner(
                             contentDescription = if (isInWatchlist) "Remove from My List" else "Add to My List",
                             modifier = Modifier.size(19.dp),
                         )
+                    }
+                }
+
+                // Quick Next Spotlight switcher when multiple featured titles exist
+                if (onNextFeatured != null) {
+                    Surface(
+                        onClick = onNextFeatured,
+                        shape = ClickableSurfaceDefaults.shape(CircleShape),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Color(0x28FFFFFF),
+                            contentColor = InkPrimary,
+                            focusedContainerColor = PureWhite,
+                            focusedContentColor = InkOnWhite,
+                        ),
+                        border = ClickableSurfaceDefaults.border(
+                            border = Border.None,
+                            focusedBorder = Border(BorderStroke(2.dp, SignalRed), shape = CircleShape),
+                        ),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+                    ) {
+                        Box(
+                            modifier = Modifier.size(38.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                contentDescription = "Next Featured",
+                                modifier = Modifier.size(21.dp),
+                            )
+                        }
                     }
                 }
             }

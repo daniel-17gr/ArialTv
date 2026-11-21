@@ -55,6 +55,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.example.arialtv.data.model.CatalogFilterOption
+import com.example.arialtv.data.model.CatalogRow
 import com.example.arialtv.data.model.MediaItem
 import com.example.arialtv.data.model.WatchProgress
 import com.example.arialtv.ui.components.ContinueWatchingRail
@@ -100,12 +101,14 @@ fun CatalogScreen(
     tabState: CatalogTabState,
     watchHistory: List<WatchProgress>,
     watchlist: List<MediaItem>,
+    recommendedRow: CatalogRow? = null,
     showPersonalRails: Boolean,
     onItemClick: (MediaItem) -> Unit,
     onPlayNow: (MediaItem) -> Unit,
     onToggleWatchlist: (MediaItem) -> Unit,
     onResumeProgress: (WatchProgress) -> Unit,
     onItemFocused: (MediaItem, String) -> Unit,
+    onNextFeatured: (() -> Unit)? = null,
     onApplyFilter: (genre: String, year: String, sort: String, country: String) -> Unit,
     onLoadMoreFiltered: () -> Unit,
     onClearFilter: () -> Unit,
@@ -169,6 +172,10 @@ fun CatalogScreen(
                 }.take(12)
             }
 
+            val watchlistIds = remember(watchlist) {
+                watchlist.mapTo(HashSet()) { it.id }
+            }
+
             Column(
                 modifier = modifier
                     .fillMaxSize()
@@ -180,10 +187,11 @@ fun CatalogScreen(
                     TvHeroBanner(
                         item = hero,
                         categoryLabel = displayedCategory,
-                        isInWatchlist = watchlist.any { it.id == hero.id },
+                        isInWatchlist = hero.id in watchlistIds,
                         onPlayClick = { onPlayNow(hero) },
                         onDetailsClick = { onItemClick(hero) },
                         onToggleWatchlist = { onToggleWatchlist(hero) },
+                        onNextFeatured = if (catalog.featured.size > 1) onNextFeatured else null,
                     )
                 }
 
@@ -238,6 +246,19 @@ fun CatalogScreen(
                                     onItemClick = onItemClick,
                                     onItemFocused = { item ->
                                         onItemFocused(item, "My List")
+                                    },
+                                )
+                            }
+                        }
+
+                        if (showPersonalRails && recommendedRow != null && recommendedRow.items.isNotEmpty()) {
+                            item(key = "because_you_watched", contentType = "media_rail") {
+                                TvMediaRail(
+                                    title = recommendedRow.category,
+                                    items = recommendedRow.items,
+                                    onItemClick = onItemClick,
+                                    onItemFocused = { item ->
+                                        onItemFocused(item, "Recommended")
                                     },
                                 )
                             }

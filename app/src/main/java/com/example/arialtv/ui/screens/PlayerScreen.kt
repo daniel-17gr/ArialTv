@@ -57,6 +57,7 @@ import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Replay
@@ -99,6 +100,9 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -149,7 +153,59 @@ import okhttp3.OkHttpClient
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-private enum class PlayerDrawer { NONE, EPISODES, SUBTITLES, VOLUME, QUALITY, SPEED, SLEEP }
+private enum class PlayerDrawer { NONE, EPISODES, AUDIO, SUBTITLES, VOLUME, QUALITY, SPEED, SLEEP }
+
+private data class EmbeddedAudioTrack(
+    val trackGroup: TrackGroup,
+    val trackIndex: Int,
+    val label: String,
+    val detail: String,
+    val isSelected: Boolean,
+)
+
+private fun extractAudioTracks(tracks: Tracks): List<EmbeddedAudioTrack> {
+    val result = mutableListOf<EmbeddedAudioTrack>()
+    var counter = 1
+    for (group in tracks.groups) {
+        if (group.type != C.TRACK_TYPE_AUDIO) continue
+        for (i in 0 until group.length) {
+            if (!group.isTrackSupported(i)) continue
+            val fmt = group.getTrackFormat(i)
+            val langTag = fmt.language.orEmpty()
+            val langName = when {
+                !fmt.label.isNullOrBlank() -> fmt.label!!
+                langTag.isNotBlank() && !langTag.equals("und", ignoreCase = true) -> {
+                    Locale.forLanguageTag(langTag).getDisplayLanguage(Locale.ENGLISH)
+                        .replaceFirstChar { it.uppercase() }
+                        .ifBlank { langTag.uppercase() }
+                }
+                else -> "Audio Track $counter"
+            }
+            val channels = when (fmt.channelCount) {
+                1 -> "Mono"
+                2 -> "Stereo"
+                6 -> "5.1"
+                8 -> "7.1"
+                else -> if (fmt.channelCount > 0) "${fmt.channelCount}ch" else ""
+            }
+            val detail = listOfNotNull(
+                langTag.takeIf { it.isNotBlank() && !it.equals("und", ignoreCase = true) }?.uppercase(),
+                channels.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            result.add(
+                EmbeddedAudioTrack(
+                    trackGroup = group.mediaTrackGroup,
+                    trackIndex = i,
+                    label = langName,
+                    detail = detail,
+                    isSelected = group.isTrackSelected(i),
+                ),
+            )
+            counter++
+        }
+    }
+    return result
+}
 
 private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
@@ -219,6 +275,7 @@ fun PlayerScreen(
     sleepTimerRemainingSec: Int,
     sleepTimerExpired: Boolean,
     onSelectQuality: (Int) -> Unit,
+    onSelectAudioDub: (String, Long) -> Unit,
     onSelectSubtitle: (String?) -> Unit,
     onUpdateSubtitleStyle: ((SubtitleStyle) -> SubtitleStyle) -> Unit,
     onUpdateAspectRatio: (AspectRatioMode) -> Unit,
@@ -247,6 +304,7 @@ fun PlayerScreen(
     var upNextCancelled by remember { mutableStateOf(false) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var recoveryToast by remember { mutableStateOf<String?>(null) }
+    var embeddedAudioTracks by remember(episodeKey) { mutableStateOf<List<EmbeddedAudioTrack>>(emptyList()) }
 
     // Software decoder fallback state (rebuilds ExoPlayer cleanly without crashing)
     var preferSoftwareDecoder by remember(episodeKey) { mutableStateOf(false) }
@@ -406,6 +464,10 @@ fun PlayerScreen(
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                embeddedAudioTracks = runCatching { extractAudioTracks(tracks) }.getOrDefault(emptyList())
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -1252,6 +1314,7 @@ fun PlayerScreen(
                                     add(String.format(Locale.US, "S%02d · E%02d", destination.season, destination.episode))
                                 }
                                 selectedStream?.qualityLabel?.let { add(it) }
+                                playback?.activeAudioLabel?.takeIf { it.isNotBlank() }?.let { add(it.uppercase()) }
                                 if (preferSoftwareDecoder) add("SW")
                                 if (playbackSpeed != 1.0f) add("${playbackSpeed}x")
                                 if (selectedSubtitle != null) add("CC ${selectedSubtitle.languageCode.uppercase()}")
@@ -1441,6 +1504,16 @@ fun PlayerScreen(
                                     activeDrawer = if (activeDrawer == PlayerDrawer.VOLUME) PlayerDrawer.NONE else PlayerDrawer.VOLUME
                                 },
                             )
+                            val hasMultipleAudio = (playback?.dubs?.size ?: 0) > 1 || embeddedAudioTracks.size > 1
+                            PlayerCircleButton(
+                                icon = Icons.Rounded.RecordVoiceOver,
+                                contentDescription = "Audio Language",
+                                active = activeDrawer == PlayerDrawer.AUDIO || hasMultipleAudio,
+                                onClick = {
+                                    wakeControls()
+                                    activeDrawer = if (activeDrawer == PlayerDrawer.AUDIO) PlayerDrawer.NONE else PlayerDrawer.AUDIO
+                                },
+                            )
                             PlayerCircleButton(
                                 icon = Icons.Rounded.ClosedCaption,
                                 contentDescription = "Subtitles",
@@ -1543,6 +1616,7 @@ fun PlayerScreen(
                 Text(
                     text = when (activeDrawer) {
                         PlayerDrawer.EPISODES -> "EPISODES"
+                        PlayerDrawer.AUDIO -> "AUDIO LANGUAGE"
                         PlayerDrawer.SUBTITLES -> "SUBTITLES & STYLE"
                         PlayerDrawer.VOLUME -> "VOLUME"
                         PlayerDrawer.QUALITY -> "QUALITY & DECODER"
@@ -1555,6 +1629,95 @@ fun PlayerScreen(
                 )
 
                 when (activeDrawer) {
+                    PlayerDrawer.AUDIO -> {
+                        val dubs = playback?.dubs.orEmpty()
+                        val currentSubjectId = playback?.subjectId ?: destination.item.id
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            if (dubs.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "DUBBED VERSIONS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = InkMuted,
+                                    )
+                                }
+                                itemsIndexed(dubs, key = { _, d -> "dub_${d.subjectId}" }) { idx, dub ->
+                                    val selected = dub.subjectId == currentSubjectId
+                                    DrawerRow(
+                                        title = dub.languageName,
+                                        trailing = when {
+                                            selected -> "ACTIVE"
+                                            dub.isOriginal -> "ORIGINAL"
+                                            dub.languageCode.isNotBlank() -> dub.languageCode.uppercase()
+                                            else -> ""
+                                        },
+                                        selected = selected,
+                                        modifier = if (idx == 0) Modifier.focusRequester(drawerFocusRequester) else Modifier,
+                                        onClick = {
+                                            activeDrawer = PlayerDrawer.NONE
+                                            val curPos = runCatching { exoPlayer.currentPosition }.getOrDefault(currentPositionMs)
+                                            onSelectAudioDub(dub.subjectId, curPos)
+                                            wakeControls()
+                                        },
+                                    )
+                                }
+                            }
+
+                            if (embeddedAudioTracks.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "STREAM AUDIO TRACKS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = InkMuted,
+                                        modifier = Modifier.padding(top = if (dubs.isNotEmpty()) 10.dp else 0.dp),
+                                    )
+                                }
+                                itemsIndexed(embeddedAudioTracks) { idx, track ->
+                                    DrawerRow(
+                                        title = track.label,
+                                        trailing = if (track.isSelected) {
+                                            listOf("ACTIVE", track.detail).filter { it.isNotBlank() }.joinToString(" · ")
+                                        } else {
+                                            track.detail
+                                        },
+                                        selected = track.isSelected,
+                                        modifier = if (dubs.isEmpty() && idx == 0) Modifier.focusRequester(drawerFocusRequester) else Modifier,
+                                        onClick = {
+                                            runCatching {
+                                                val override = TrackSelectionOverride(track.trackGroup, listOf(track.trackIndex))
+                                                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                                                    .buildUpon()
+                                                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                                                    .addOverride(override)
+                                                    .build()
+                                            }
+                                            activeDrawer = PlayerDrawer.NONE
+                                            wakeControls()
+                                        },
+                                    )
+                                }
+                            }
+
+                            if (dubs.isEmpty() && embeddedAudioTracks.isEmpty()) {
+                                item {
+                                    DrawerRow(
+                                        title = playback?.activeAudioLabel?.ifBlank { "Original Audio" } ?: "Original Audio",
+                                        trailing = "ACTIVE",
+                                        selected = true,
+                                        modifier = Modifier.focusRequester(drawerFocusRequester),
+                                        onClick = {
+                                            activeDrawer = PlayerDrawer.NONE
+                                            wakeControls()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     PlayerDrawer.VOLUME -> {
                         val pct = if (isMuted) 0 else (volumeLevel * 100).toInt()
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {

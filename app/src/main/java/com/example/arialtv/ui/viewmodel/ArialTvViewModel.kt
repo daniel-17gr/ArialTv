@@ -7,12 +7,15 @@ import com.example.arialtv.data.model.AppMetadata
 import com.example.arialtv.data.model.AppSettings
 import com.example.arialtv.data.model.AspectRatioMode
 import com.example.arialtv.data.model.CatalogLanguage
+import com.example.arialtv.data.model.CatalogRow
 import com.example.arialtv.data.model.ConnectionMode
 import com.example.arialtv.data.model.ConnectionTestResult
+import com.example.arialtv.data.model.DubOption
 import com.example.arialtv.data.model.EpisodeProgress
 import com.example.arialtv.data.model.HomeCatalog
 import com.example.arialtv.data.model.MediaDetails
 import com.example.arialtv.data.model.MediaItem
+import com.example.arialtv.data.model.PreferredAudioLanguage
 import com.example.arialtv.data.model.PreferredCodec
 import com.example.arialtv.data.model.PreferredQuality
 import com.example.arialtv.data.model.ResolvedPlayback
@@ -53,6 +56,8 @@ sealed interface AppDestination {
         val episode: Int = 0,
         val startPositionMs: Long = 0L,
         val seasonsMeta: List<SeasonInfo> = emptyList(),
+        val dubsMeta: List<DubOption> = emptyList(),
+        val explicitDubSubjectId: String? = null,
     ) : AppDestination
 }
 
@@ -94,6 +99,7 @@ data class SearchUiState(
 data class DetailUiState(
     val isLoading: Boolean = false,
     val details: MediaDetails? = null,
+    val similarItems: List<MediaItem> = emptyList(),
     val selectedSeason: Int = 1,
     val error: String? = null,
 )
@@ -130,9 +136,11 @@ data class ArialTvUiState(
     val episodeProgress: Map<String, EpisodeProgress> = emptyMap(),
     val searchHistory: List<String> = emptyList(),
     val watchlist: List<MediaItem> = emptyList(),
+    val recommendedRow: CatalogRow? = null,
     val sleepTimerMinutes: Int = 0,
     val sleepTimerRemainingSec: Int = 0,
     val sleepTimerExpired: Boolean = false,
+    val toastMessage: String? = null,
 )
 
 class ArialTvViewModel(application: Application) : AndroidViewModel(application) {
@@ -156,11 +164,43 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     private var searchJob: Job? = null
     private var suggestJob: Job? = null
     private var trendingJob: Job? = null
+    private var recommendationJob: Job? = null
+    private var toastJob: Job? = null
     private val filterJobs = mutableMapOf<TvNavTab, Job>()
     private var sleepTimerJob: Job? = null
 
     init {
         loadCatalogForTab(TvNavTab.HOME, forceRefresh = true)
+        loadPersonalRecommendations()
+    }
+
+    fun showToast(message: String) {
+        toastJob?.cancel()
+        _uiState.update { it.copy(toastMessage = message) }
+        toastJob = viewModelScope.launch {
+            delay(2_400L)
+            _uiState.update { it.copy(toastMessage = null) }
+        }
+    }
+
+    private fun loadPersonalRecommendations() {
+        val anchor = _uiState.value.watchHistory.firstOrNull()?.item ?: return
+        recommendationJob?.cancel()
+        val settings = _uiState.value.settings
+        recommendationJob = viewModelScope.launch {
+            val similar = runCatching { repository.fetchSimilarItems(settings, anchor) }
+                .getOrDefault(emptyList())
+            if (similar.isNotEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        recommendedRow = CatalogRow(
+                            category = "Because You Watched ${anchor.title}",
+                            items = similar,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     fun selectTab(tab: TvNavTab) {
@@ -405,9 +445,9 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             try {
                 val catalog = when (tab) {
-                    TvNavTab.HOME -> repository.fetchHome(settings, tabId = 0)
-                    TvNavTab.MOVIES -> repository.fetchMoviesCatalog(settings)
-                    TvNavTab.SERIES -> repository.fetchSeriesCatalog(settings)
+                    TvNavTab.HOME -> repository.fetchHome(settings, tabId = 0, forceRefresh = forceRefresh)
+                    TvNavTab.MOVIES -> repository.fetchMoviesCatalog(settings, forceRefresh = forceRefresh)
+                    TvNavTab.SERIES -> repository.fetchSeriesCatalog(settings, forceRefresh = forceRefresh)
                     else -> return@launch
                 }
                 val initialHero = catalog.featured.firstOrNull()
@@ -426,6 +466,9 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         error = null,
                     )
                 }
+                if (forceRefresh && currentTabState.catalog != null) {
+                    showToast("Catalog refreshed")
+                }
             } catch (e: Exception) {
                 updateTabState(tab) {
                     it.copy(
@@ -434,6 +477,17 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             }
+        }
+    }
+
+    fun cycleHeroFeatured(tab: TvNavTab) {
+        val state = getTabState(tab)
+        val featured = state.catalog?.featured.orEmpty()
+        if (featured.size < 2) return
+        val currentIdx = featured.indexOfFirst { it.id == state.focusedItem?.id }
+        val next = featured[(currentIdx + 1) % featured.size]
+        updateTabState(tab) {
+            it.copy(focusedItem = next, focusedCategory = "Featured")
         }
     }
 
@@ -558,8 +612,10 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     // --- Watchlist / My List ---
 
     fun toggleWatchlist(item: MediaItem) {
+        val existed = _uiState.value.watchlist.any { it.id == item.id }
         val updated = preferences.toggleWatchlist(item)
         _uiState.update { it.copy(watchlist = updated) }
+        showToast(if (existed) "Removed from My List" else "Added to My List")
     }
 
     fun clearWatchlist() {
@@ -622,10 +678,21 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         detailState = DetailUiState(
                             isLoading = false,
                             details = details,
+                            similarItems = it.detailState.similarItems,
                             selectedSeason = defaultSeason,
                             error = null,
                         ),
                     )
+                }
+                // Load live "More Like This" recommendations right after details arrive
+                val similar = runCatching { repository.fetchSimilarItems(settings, details.item) }
+                    .getOrDefault(emptyList())
+                _uiState.update {
+                    if (it.detailState.details?.item?.id == details.item.id) {
+                        it.copy(detailState = it.detailState.copy(similarItems = similar))
+                    } else {
+                        it
+                    }
                 }
             } catch (_: Exception) {
                 _uiState.update {
@@ -678,9 +745,11 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             backStack.addLast(currentDest)
         }
 
-        val effectiveSeasons = seasonsMeta.ifEmpty {
-            _uiState.value.detailState.details?.takeIf { it.item.id == item.id }?.seasons.orEmpty()
-        }
+        val detailSnapshot = _uiState.value.detailState.details?.takeIf { it.item.id == item.id }
+        val effectiveSeasons = seasonsMeta.ifEmpty { detailSnapshot?.seasons.orEmpty() }
+        val effectiveDubs = detailSnapshot?.dubs.orEmpty()
+        // If user explicitly picked a dub on DetailScreen (i.e. item.id matches one of the dubs), honor it
+        val explicitFromDetails = detailSnapshot?.dubs?.firstOrNull { it.subjectId == item.id }?.subjectId
 
         val playerDest = AppDestination.Player(
             item = item,
@@ -688,6 +757,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             episode = resolvedEpisode,
             startPositionMs = startPos,
             seasonsMeta = effectiveSeasons,
+            dubsMeta = effectiveDubs,
+            explicitDubSubjectId = explicitFromDetails,
         )
 
         _uiState.update {
@@ -699,6 +770,33 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         }
 
         resolveStreamFor(playerDest, requestedResolution)
+    }
+
+    /**
+     * Switches to another dubbed audio language directly inside the player while preserving
+     * the exact playback timestamp.
+     */
+    fun switchPlayerAudioDub(dubSubjectId: String, resumePositionMs: Long) {
+        val dest = _uiState.value.destination as? AppDestination.Player ?: return
+        val currentPlayback = _uiState.value.playerState.playback
+        if (currentPlayback?.subjectId == dubSubjectId) return
+
+        val dubs = currentPlayback?.dubs?.ifEmpty { dest.dubsMeta } ?: dest.dubsMeta
+        val targetDub = dubs.firstOrNull { it.subjectId == dubSubjectId }
+
+        val updatedDest = dest.copy(
+            startPositionMs = resumePositionMs.coerceAtLeast(0L),
+            dubsMeta = dubs,
+            explicitDubSubjectId = dubSubjectId,
+        )
+        _uiState.update {
+            it.copy(
+                destination = updatedDest,
+                playerState = it.playerState.copy(isLoading = true, error = null),
+            )
+        }
+        targetDub?.let { showToast("Switching audio to ${it.languageName}") }
+        resolveStreamFor(updatedDest, requestedResolution = null)
     }
 
     fun playEpisodeFromPlayer(season: Int, episode: Int) {
@@ -803,6 +901,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                     season = dest.season,
                     episode = dest.episode,
                     seasonsMeta = seasons,
+                    dubsMeta = dest.dubsMeta,
+                    explicitDubSubjectId = dest.explicitDubSubjectId,
                     requestedResolution = requestedResolution,
                 )
                 val selectedIdx = resolved.availableStreams
@@ -816,7 +916,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
 
                 _uiState.update {
                     it.copy(
-                        destination = dest.copy(seasonsMeta = seasons),
+                        destination = dest.copy(seasonsMeta = seasons, dubsMeta = resolved.dubs),
                         playerState = PlayerUiState(
                             isLoading = false,
                             playback = resolved,
@@ -843,6 +943,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     fun recordPlaybackProgress(positionMs: Long, durationMs: Long) {
         val dest = _uiState.value.destination as? AppDestination.Player ?: return
         if (positionMs < 3_000L || durationMs <= 0L) return
+        val prevTopId = _uiState.value.watchHistory.firstOrNull()?.item?.id
         val updatedHistory = preferences.saveWatchProgress(
             WatchProgress(
                 item = dest.item,
@@ -858,6 +959,9 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             _uiState.value.episodeProgress
         }
         _uiState.update { it.copy(watchHistory = updatedHistory, episodeProgress = updatedEpMap) }
+        if (prevTopId != dest.item.id) {
+            loadPersonalRecommendations()
+        }
     }
 
     // --- Sleep Timer / Timeout ---
@@ -868,12 +972,14 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update {
                 it.copy(sleepTimerMinutes = 0, sleepTimerRemainingSec = 0, sleepTimerExpired = false)
             }
+            showToast("Sleep timer off")
             return
         }
         val totalSec = minutes * 60
         _uiState.update {
             it.copy(sleepTimerMinutes = minutes, sleepTimerRemainingSec = totalSec, sleepTimerExpired = false)
         }
+        showToast("Sleep timer: ${AppMetadata.formatSleepLongLabel(minutes)}")
         sleepTimerJob = viewModelScope.launch {
             var remaining = totalSec
             while (remaining > 0) {
@@ -964,7 +1070,13 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateLanguage(language: CatalogLanguage) {
         updateSettings { it.copy(language = language) }
+        showToast("Catalog language: ${language.label}")
         invalidateCatalogs()
+    }
+
+    fun updatePreferredAudioLanguage(audioLanguage: PreferredAudioLanguage) {
+        updateSettings { it.copy(preferredAudioLanguage = audioLanguage) }
+        showToast("Preferred audio: ${audioLanguage.label}")
     }
 
     fun updatePreferredQuality(quality: PreferredQuality) {
@@ -1078,6 +1190,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun invalidateCatalogs() {
+        repository.clearCaches()
         _uiState.update {
             it.copy(
                 homeState = CatalogTabState(),
@@ -1087,6 +1200,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         loadCatalogForTab(TvNavTab.HOME, forceRefresh = true)
+        loadPersonalRecommendations()
     }
 
     private fun updateTabState(tab: TvNavTab, transform: (CatalogTabState) -> CatalogTabState) {
