@@ -8,11 +8,12 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Typography
 import com.example.arialtv.R
 
-/** Authentic Nothing-inspired dot-matrix display font (Google Fonts: Doto) */
-val DotMatrixFont = FontFamily(
-    Font(R.font.doto_semibold, FontWeight.SemiBold),
-    Font(R.font.doto_bold, FontWeight.Bold),
-    Font(R.font.doto_extrabold, FontWeight.ExtraBold),
+/** Editorial serif accent font (Google Fonts: Lora) */
+val LoraFont = FontFamily(
+    Font(R.font.lora_regular, FontWeight.Normal),
+    Font(R.font.lora_medium, FontWeight.Medium),
+    Font(R.font.lora_semibold, FontWeight.SemiBold),
+    Font(R.font.lora_bold, FontWeight.Bold),
 )
 
 /** Crisp geometric sans-serif for 10-foot YouTube TV legibility (Google Fonts: Plus Jakarta Sans) */
@@ -85,17 +86,17 @@ val ArialTvTypography = Typography(
         lineHeight = 18.sp,
     ),
     labelMedium = TextStyle(
-        fontFamily = DotMatrixFont,
+        fontFamily = LoraFont,
         fontWeight = FontWeight.Bold,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.8.sp,
+        fontSize = 13.sp,
+        lineHeight = 17.sp,
+        letterSpacing = 0.4.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = DotMatrixFont,
+        fontFamily = LoraFont,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 11.sp,
-        lineHeight = 14.sp,
-        letterSpacing = 0.9.sp,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp,
     ),
 )

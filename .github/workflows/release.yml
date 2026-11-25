@@ -1,0 +1,33 @@
+name: Publish Arial TV Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create or update GitHub Release with signed APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ ! -f releases/ArialTv-release.apk ]; then
+            echo "Missing releases/ArialTv-release.apk"
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" releases/ArialTv-release.apk --clobber
+          else
+            gh release create "$TAG" releases/ArialTv-release.apk \
+              --title "Arial TV $TAG" \
+              --generate-notes
+          fi

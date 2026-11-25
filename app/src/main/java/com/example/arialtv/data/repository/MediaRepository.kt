@@ -121,27 +121,32 @@ class MediaRepository(
                 val rankDef = async { safeCall { v3Client.fetchSearchRank() } }
                 val sciFiDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val thrillerDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Thriller", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Thriller", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val actionDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Action", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Action", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val animDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Animation", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Animation", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val comedyDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Comedy", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Comedy", sort = "Hottest", page = 1, perPage = 20).items
+                    }.orEmpty()
+                }
+                val koreaSeriesDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 2, country = "Korea", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
 
@@ -153,6 +158,7 @@ class MediaRepository(
                 val actionList = actionDef.await()
                 val animList = animDef.await()
                 val comedyList = comedyDef.await()
+                val koreaSeriesList = koreaSeriesDef.await()
 
                 if (moviesTab == null && seriesTab == null && rank == null &&
                     sciFiList.isEmpty() && actionList.isEmpty()
@@ -169,8 +175,8 @@ class MediaRepository(
                     val quality = pool.cleanHomeQuality(filterAdult, minRating = minRating)
                         .ifEmpty { pool.cleanHomeQuality(filterAdult, minRating = 4.5) }
                     val fresh = quality.filter { it.id !in seenAcrossHome }
-                    val chosen = if (fresh.size >= 6) fresh else quality
-                    chosen.take(10).forEach { seenAcrossHome.add(it.id) }
+                    val chosen = if (fresh.size >= 12) fresh else (fresh + quality).distinctBy { it.id }
+                    chosen.take(12).forEach { seenAcrossHome.add(it.id) }
                     return chosen
                 }
 
@@ -199,7 +205,7 @@ class MediaRepository(
                             country = country,
                             sort = sort,
                             minRating = minRating,
-                            seedItems = ordered.take(12),
+                            seedItems = ordered.take(16),
                         ),
                     )
                 }
@@ -280,7 +286,7 @@ class MediaRepository(
                     curatedRow(
                         title = "K-Drama & World Hits",
                         subtitle = "Acclaimed Korean & international series",
-                        pool = kDramaSeries,
+                        pool = kDramaSeries + koreaSeriesList,
                         channelId = 2,
                         country = "Korea",
                         sort = "Hottest",
@@ -362,37 +368,37 @@ class MediaRepository(
                 val rankDef = async { safeCall { v3Client.fetchSearchRank().movies }.orEmpty() }
                 val actionDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Action", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Action", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val sciFiDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val crimeDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Crime", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Crime", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val horrorDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Horror", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Horror", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val comedyDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Comedy", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Comedy", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val animDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Animation", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Animation", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val historyDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "History", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 1, genre = "History", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
 
@@ -435,7 +441,7 @@ class MediaRepository(
                             genre = genre,
                             sort = sort,
                             minRating = minRating,
-                            seedItems = ordered.take(12),
+                            seedItems = ordered.take(16),
                         ),
                     )
                 }
@@ -554,37 +560,37 @@ class MediaRepository(
                 val rankDef = async { safeCall { v3Client.fetchSearchRank().series }.orEmpty() }
                 val latestDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 2, sort = "Latest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 2, sort = "Latest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val crimeDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 2, genre = "Crime", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Crime", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val koreaDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 2, country = "Korea", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 2, country = "Korea", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val sciFiDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 2, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val dramaDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 2, genre = "Drama", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Drama", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val animeDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 2, genre = "Anime", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Anime", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
                 val comedyDef = async {
                     safeCall {
-                        v3Client.fetchFilteredList(channelId = 2, genre = "Comedy", sort = "Hottest", page = 1, perPage = 16).items
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Comedy", sort = "Hottest", page = 1, perPage = 20).items
                     }.orEmpty()
                 }
 
@@ -627,7 +633,7 @@ class MediaRepository(
                             country = country,
                             sort = sort,
                             minRating = minRating,
-                            seedItems = cleaned.take(12),
+                            seedItems = cleaned.take(16),
                         ),
                     )
                 }

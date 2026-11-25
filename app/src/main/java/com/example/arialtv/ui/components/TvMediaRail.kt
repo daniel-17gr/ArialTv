@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,25 +27,21 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.example.arialtv.data.model.MediaItem
 import com.example.arialtv.data.model.WatchProgress
 import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
-import com.example.arialtv.ui.theme.InkSecondary
 import com.example.arialtv.ui.theme.PureWhite
 import com.example.arialtv.ui.theme.SurfaceElevated
 import com.example.arialtv.ui.theme.SurfaceTonal
 import java.util.Locale
 
 private val RailContentPadding = PaddingValues(horizontal = 32.dp, vertical = 12.dp)
-private val SeeAllCardShape = RoundedCornerShape(10.dp)
-private val SeeAllPillShape = RoundedCornerShape(50)
+private val SeeMoreCardShape = RoundedCornerShape(10.dp)
 
 @Composable
 fun TvMediaRail(
@@ -74,57 +69,20 @@ fun TvMediaRail(
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                if (indexPrefix != null) {
-                    Text(
-                        text = String.format(Locale.US, "%02d", indexPrefix),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = InkMuted,
-                    )
-                }
+            if (indexPrefix != null) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = InkPrimary,
+                    text = String.format(Locale.US, "%02d", indexPrefix),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = InkMuted,
                 )
             }
-
-            if (onExpandCategory != null) {
-                Surface(
-                    onClick = onExpandCategory,
-                    shape = ClickableSurfaceDefaults.shape(SeeAllPillShape),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = SurfaceTonal,
-                        contentColor = InkSecondary,
-                        focusedContainerColor = PureWhite,
-                        focusedContentColor = InkOnWhite,
-                    ),
-                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Text(
-                            text = "See All",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                            contentDescription = "Expand $title",
-                            modifier = Modifier.size(15.dp),
-                        )
-                    }
-                }
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = InkPrimary,
+            )
         }
 
         LazyRow(
@@ -145,8 +103,8 @@ fun TvMediaRail(
             }
 
             if (onExpandCategory != null) {
-                item(key = "${title}_see_all", contentType = "see_all_card") {
-                    SeeAllCategoryCard(onClick = onExpandCategory)
+                item(key = "${title}_see_more", contentType = "see_more_card") {
+                    SeeMoreCategoryCard(onClick = onExpandCategory)
                 }
             }
         }
@@ -154,7 +112,7 @@ fun TvMediaRail(
 }
 
 @Composable
-private fun SeeAllCategoryCard(
+private fun SeeMoreCategoryCard(
     onClick: () -> Unit,
 ) {
     Column(
@@ -166,7 +124,7 @@ private fun SeeAllCategoryCard(
             modifier = Modifier
                 .width(128.dp)
                 .height(186.dp),
-            shape = CardDefaults.shape(shape = SeeAllCardShape),
+            shape = CardDefaults.shape(shape = SeeMoreCardShape),
             scale = CardDefaults.scale(focusedScale = 1.04f),
             border = CardDefaults.border(border = Border.None, focusedBorder = Border.None),
             glow = CardDefaults.glow(),
@@ -193,19 +151,19 @@ private fun SeeAllCategoryCard(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                        contentDescription = "See All",
+                        contentDescription = "See More",
                         tint = PureWhite,
                         modifier = Modifier.size(20.dp),
                     )
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "See All",
+                    text = "See More",
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = "Explore more",
+                    text = "Explore category",
                     style = MaterialTheme.typography.labelSmall,
                     color = InkMuted,
                 )

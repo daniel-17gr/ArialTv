@@ -1,6 +1,6 @@
 # Arial TV (`arial tv.`)
 
-A standalone **Android TV** streaming app crafted with a minimalist **Nothing OS × YouTube TV** aesthetic — dot-matrix typography, crisp monochrome + Signal Red (`#E11D25`) focus accents, borderless cinema posters, live catalog filtering, customizable subtitles, and resilient Media3 + FFmpeg playback.
+A standalone **Android TV** streaming app crafted with a clean **YouTube TV × Lora** editorial aesthetic — Google Font **Lora** + **Plus Jakarta Sans** typography, pure monochrome focus highlights with warm light-orange active accents, borderless cinema posters, live multi-filter exploration, customizable subtitles, and resilient Media3 + FFmpeg playback.
 
 Developed by **Auris Daniel** ([@daniel-17gr](https://github.com/daniel-17gr)).
 
@@ -16,7 +16,7 @@ Developed by **Auris Daniel** ([@daniel-17gr](https://github.com/daniel-17gr)).
   - Edge-to-edge poster rails with content-type badges (`MOVIE`, `SERIES`, `DOC`, `MUSIC`) and a custom framed portrait showcase inside the remote Menu Drawer.
 - **Smart Home Discovery, Strict Family Filter, Expandable Categories & Voice Search**:
   - **Strict Adult & Erotic Filter**: Enabled by default in **Settings → Safety & Data**, stripping adult, erotic, softcore, 18+, NSFW, and micro-drama spam across Home, Categories, Search, Trending, and More Like This.
-  - **Curated Cinema Categories + Expandable Category Explorer**: High-quality parallel-loaded rails (Trending Worldwide, IMDb Top Cinema, Top TV Series, Action & Blockbusters, Sci-Fi & Cyberpunk, Crime & Mystery Thrillers, Animation & Family, K-Drama & World Hits, Comedy Picks) show a clean 6-title preview with a **`See All →`** card that opens a paginated full-screen **Category Explorer** with Sort, Year, and Region sub-filters.
+  - **Curated Cinema Categories + Expandable Category Explorer**: High-quality parallel-loaded rails (Trending Worldwide, IMDb Top Cinema, Top TV Series, Action & Blockbusters, Sci-Fi & Cyberpunk, Crime & Mystery Thrillers, Animation & Family, K-Drama & World Hits, Comedy Picks) show a 12-title preview ending with a **`See More`** card that opens a paginated full-screen **Category Explorer** with Sort, Year, and Region sub-filters.
   - **Upgraded Explore Filters**: Filter Home, Films, and Series live by Type (Films/Series), Genre (`Action`, `Sci-Fi`, `Thriller`, `Crime`, `Drama`, `Horror`, `Animation`, `Anime`, etc.), Sort (`For You`, `Most Popular`, `Top Rated`, `Newest`), Year (`2026–2020`), and Region (`USA`, `UK`, `South Korea`, `Japan`, `France`, `Spain`, `India`, `China`).
   - TV remote Voice Search mic button, instant live search suggestions while typing, persisted Search History with 1-click clear, `All / Films / Series` filter pills, and live API Trending Now discovery.
 - **Cinema Player (Media3 ExoPlayer + Jellyfin FFmpeg)**:

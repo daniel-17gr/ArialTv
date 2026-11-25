@@ -315,7 +315,7 @@ fun CatalogScreen(
                                 title = row.category,
                                 items = row.items,
                                 indexPrefix = idx + 1,
-                                previewLimit = 6,
+                                previewLimit = 12,
                                 onExpandCategory = row.expandQuery?.let { query ->
                                     { onExpandCategory(query) }
                                 },
