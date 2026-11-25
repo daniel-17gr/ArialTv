@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
@@ -44,84 +46,94 @@ fun ExitConfirmationDialog(
     onStay: () -> Unit,
     onConfirmExit: () -> Unit,
 ) {
-    val stayFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        delay(60)
-        runCatching { stayFocus.requestFocus() }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xCC000000)),
-        contentAlignment = Alignment.Center,
+    Dialog(
+        onDismissRequest = onStay,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            decorFitsSystemWindows = false,
+        ),
     ) {
-        Column(
-            modifier = Modifier
-                .widthIn(min = 340.dp, max = 440.dp)
-                .clip(RoundedCornerShape(22.dp))
-                .background(SurfaceTonal)
-                .padding(horizontal = 32.dp, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.arial_tv_logo_dark),
-                contentDescription = "arial tv.",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.height(22.dp),
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = "EXIT ARIAL TV?",
-                style = MaterialTheme.typography.labelMedium,
-                color = InkSecondary,
-            )
-            Text(
-                text = "Are you sure you want to close the app?",
-                style = MaterialTheme.typography.bodyMedium,
-                color = InkPrimary,
-            )
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                val pillShape = RoundedCornerShape(50)
-                Surface(
-                    onClick = onStay,
-                    modifier = Modifier.focusRequester(stayFocus),
-                    shape = ClickableSurfaceDefaults.shape(pillShape),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = SurfaceElevated,
-                        contentColor = InkPrimary,
-                        focusedContainerColor = PureWhite,
-                        focusedContentColor = InkOnWhite,
-                    ),
-                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
-                ) {
-                    Text(
-                        text = "Stay",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 11.dp),
-                    )
-                }
+        val stayFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            delay(50)
+            runCatching { stayFocus.requestFocus() }
+        }
 
-                Surface(
-                    onClick = onConfirmExit,
-                    shape = ClickableSurfaceDefaults.shape(pillShape),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = SurfaceElevated,
-                        contentColor = SignalRed,
-                        focusedContainerColor = SignalRed,
-                        focusedContentColor = PureWhite,
-                    ),
-                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
-                ) {
-                    Text(
-                        text = "Exit",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 11.dp),
-                    )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xCC000000)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(min = 340.dp, max = 440.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(SurfaceTonal)
+                    .padding(horizontal = 32.dp, vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.arial_tv_logo_dark),
+                    contentDescription = "arial tv.",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.height(22.dp),
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "EXIT ARIAL TV?",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = InkSecondary,
+                )
+                Text(
+                    text = "Are you sure you want to close the app?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = InkPrimary,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val pillShape = RoundedCornerShape(50)
+                    Surface(
+                        onClick = onStay,
+                        modifier = Modifier.focusRequester(stayFocus),
+                        shape = ClickableSurfaceDefaults.shape(pillShape),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = SurfaceElevated,
+                            contentColor = InkPrimary,
+                            focusedContainerColor = PureWhite,
+                            focusedContentColor = InkOnWhite,
+                        ),
+                        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+                    ) {
+                        Text(
+                            text = "Stay",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 11.dp),
+                        )
+                    }
+
+                    Surface(
+                        onClick = onConfirmExit,
+                        shape = ClickableSurfaceDefaults.shape(pillShape),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = SurfaceElevated,
+                            contentColor = SignalRed,
+                            focusedContainerColor = SignalRed,
+                            focusedContentColor = PureWhite,
+                        ),
+                        border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+                    ) {
+                        Text(
+                            text = "Exit",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 11.dp),
+                        )
+                    }
                 }
             }
         }

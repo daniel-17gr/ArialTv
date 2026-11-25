@@ -32,6 +32,7 @@ import com.example.arialtv.ui.components.QuickMenuOverlay
 import com.example.arialtv.ui.components.SplashLoadingOverlay
 import com.example.arialtv.ui.components.TvNavigationShell
 import com.example.arialtv.ui.screens.CatalogScreen
+import com.example.arialtv.ui.screens.CategoryScreen
 import com.example.arialtv.ui.screens.DetailScreen
 import com.example.arialtv.ui.screens.LibraryScreen
 import com.example.arialtv.ui.screens.PlayerScreen
@@ -123,6 +124,17 @@ fun ArialTvApp(
                 )
             }
 
+            is AppDestination.Category -> {
+                CategoryScreen(
+                    categoryState = state.categoryState,
+                    onBack = { viewModel.navigateBack() },
+                    onItemClick = viewModel::openDetails,
+                    onUpdateFilters = viewModel::updateCategoryFilters,
+                    onLoadMore = viewModel::loadMoreCategoryItems,
+                    onRetry = viewModel::retryCategoryLoad,
+                )
+            }
+
             AppDestination.Browse -> {
                 val isFullBleedTop = state.activeTab == TvNavTab.HOME ||
                     state.activeTab == TvNavTab.MOVIES ||
@@ -143,6 +155,7 @@ fun ArialTvApp(
                             watchlist = state.watchlist,
                             recommendedRow = state.recommendedRow,
                             showPersonalRails = true,
+                            showTypeToggle = true,
                             onItemClick = viewModel::openDetails,
                             onPlayNow = { item -> viewModel.startPlayback(item) },
                             onToggleWatchlist = viewModel::toggleWatchlist,
@@ -158,11 +171,12 @@ fun ArialTvApp(
                                 viewModel.onCardFocused(TvNavTab.HOME, item, category)
                             },
                             onNextFeatured = { viewModel.cycleHeroFeatured(TvNavTab.HOME) },
-                            onApplyFilter = { genre, year, sort, country ->
-                                viewModel.applyCatalogFilter(TvNavTab.HOME, genre, year, sort, country)
+                            onApplyFilter = { genre, year, sort, country, channelId ->
+                                viewModel.applyCatalogFilter(TvNavTab.HOME, genre, year, sort, country, channelId)
                             },
                             onLoadMoreFiltered = { viewModel.loadMoreFilteredItems(TvNavTab.HOME) },
                             onClearFilter = { viewModel.clearCatalogFilter(TvNavTab.HOME) },
+                            onExpandCategory = viewModel::openCategory,
                             onRetry = { viewModel.loadCatalogForTab(TvNavTab.HOME, forceRefresh = true) },
                             onOpenSettings = { viewModel.selectTab(TvNavTab.SETTINGS) },
                         )
@@ -172,6 +186,7 @@ fun ArialTvApp(
                             watchHistory = emptyList(),
                             watchlist = state.watchlist,
                             showPersonalRails = false,
+                            showTypeToggle = false,
                             onItemClick = viewModel::openDetails,
                             onPlayNow = { item -> viewModel.startPlayback(item) },
                             onToggleWatchlist = viewModel::toggleWatchlist,
@@ -180,11 +195,12 @@ fun ArialTvApp(
                                 viewModel.onCardFocused(TvNavTab.MOVIES, item, category)
                             },
                             onNextFeatured = { viewModel.cycleHeroFeatured(TvNavTab.MOVIES) },
-                            onApplyFilter = { genre, year, sort, country ->
-                                viewModel.applyCatalogFilter(TvNavTab.MOVIES, genre, year, sort, country)
+                            onApplyFilter = { genre, year, sort, country, channelId ->
+                                viewModel.applyCatalogFilter(TvNavTab.MOVIES, genre, year, sort, country, channelId)
                             },
                             onLoadMoreFiltered = { viewModel.loadMoreFilteredItems(TvNavTab.MOVIES) },
                             onClearFilter = { viewModel.clearCatalogFilter(TvNavTab.MOVIES) },
+                            onExpandCategory = viewModel::openCategory,
                             onRetry = { viewModel.loadCatalogForTab(TvNavTab.MOVIES, forceRefresh = true) },
                             onOpenSettings = { viewModel.selectTab(TvNavTab.SETTINGS) },
                         )
@@ -194,6 +210,7 @@ fun ArialTvApp(
                             watchHistory = emptyList(),
                             watchlist = state.watchlist,
                             showPersonalRails = false,
+                            showTypeToggle = false,
                             onItemClick = viewModel::openDetails,
                             onPlayNow = { item -> viewModel.startPlayback(item) },
                             onToggleWatchlist = viewModel::toggleWatchlist,
@@ -202,11 +219,12 @@ fun ArialTvApp(
                                 viewModel.onCardFocused(TvNavTab.SERIES, item, category)
                             },
                             onNextFeatured = { viewModel.cycleHeroFeatured(TvNavTab.SERIES) },
-                            onApplyFilter = { genre, year, sort, country ->
-                                viewModel.applyCatalogFilter(TvNavTab.SERIES, genre, year, sort, country)
+                            onApplyFilter = { genre, year, sort, country, channelId ->
+                                viewModel.applyCatalogFilter(TvNavTab.SERIES, genre, year, sort, country, channelId)
                             },
                             onLoadMoreFiltered = { viewModel.loadMoreFilteredItems(TvNavTab.SERIES) },
                             onClearFilter = { viewModel.clearCatalogFilter(TvNavTab.SERIES) },
+                            onExpandCategory = viewModel::openCategory,
                             onRetry = { viewModel.loadCatalogForTab(TvNavTab.SERIES, forceRefresh = true) },
                             onOpenSettings = { viewModel.selectTab(TvNavTab.SETTINGS) },
                         )
@@ -249,6 +267,7 @@ fun ArialTvApp(
                             onBridgeUrlChange = viewModel::updateBridgeBaseUrl,
                             onLanguageChange = viewModel::updateLanguage,
                             onPreferredAudioChange = viewModel::updatePreferredAudioLanguage,
+                            onAdultFilterChange = viewModel::updateAdultFilterEnabled,
                             onQualityChange = viewModel::updatePreferredQuality,
                             onCodecChange = viewModel::updatePreferredCodec,
                             onAutoPlayNextChange = viewModel::updateAutoPlayNextEpisode,
@@ -260,6 +279,8 @@ fun ArialTvApp(
                             onUpdateSubtitleStyle = viewModel::updateSubtitleStyle,
                             onTestConnection = viewModel::runConnectionTest,
                             onCheckForUpdates = viewModel::checkForGithubUpdate,
+                            onDownloadAndInstallUpdate = viewModel::downloadAndInstallUpdate,
+                            onClearCrashLog = viewModel::clearCrashLog,
                             onClearWatchHistory = viewModel::clearWatchHistory,
                             onClearSearchHistory = viewModel::clearSearchHistory,
                             onClearWatchlist = viewModel::clearWatchlist,

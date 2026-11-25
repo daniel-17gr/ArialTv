@@ -1,5 +1,6 @@
 package com.example.arialtv.ui.components
 
+import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -36,10 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -111,6 +115,7 @@ fun TvNavigationShell(
 
         if (isWideTv) {
             var railFocused by remember { mutableStateOf(false) }
+            val contentFocusRequester = remember { FocusRequester() }
 
             Box(modifier = Modifier.fillMaxSize()) {
                 // Main Content Stage — FIXED left inset (68dp), NEVER resizes when rail toggles!
@@ -123,7 +128,8 @@ fun TvNavigationShell(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(top = if (isFullBleedTop) 0.dp else 56.dp),
+                            .padding(top = if (isFullBleedTop) 0.dp else 56.dp)
+                            .focusRequester(contentFocusRequester),
                     ) {
                         content()
                     }
@@ -158,6 +164,21 @@ fun TvNavigationShell(
                         .background(if (railFocused) RailOverlayBg else RailSurface)
                         .onFocusChanged { state ->
                             if (railFocused != state.hasFocus) railFocused = state.hasFocus
+                        }
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                            when (keyEvent.nativeKeyEvent.keyCode) {
+                                KeyEvent.KEYCODE_BACK -> {
+                                    if (railFocused) {
+                                        runCatching { contentFocusRequester.requestFocus() }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                                KeyEvent.KEYCODE_DPAD_LEFT -> railFocused
+                                else -> false
+                            }
                         }
                         .padding(vertical = 18.dp, horizontal = 10.dp),
                     horizontalAlignment = if (railFocused) Alignment.Start else Alignment.CenterHorizontally,

@@ -354,6 +354,7 @@ fun PlayerScreen(
     val endedFocusRequester = remember { FocusRequester() }
     val errorFocusRequester = remember { FocusRequester() }
     val sleepFocusRequester = remember { FocusRequester() }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
 
     val latestPlayerState by rememberUpdatedState(playerState)
     val latestOnSelectQuality by rememberUpdatedState(onSelectQuality)
@@ -545,7 +546,11 @@ fun PlayerScreen(
                     onSaveProgress(pos, dur)
                 }
             }
+            if (playerViewRef?.player === exoPlayer) {
+                runCatching { playerViewRef?.player = null }
+            }
             runCatching { exoPlayer.removeListener(listener) }
+            runCatching { exoPlayer.stop() }
             runCatching { exoPlayer.release() }
         }
     }
@@ -926,9 +931,11 @@ fun PlayerScreen(
                     useController = false
                     keepScreenOn = true
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    playerViewRef = this
                 }
             },
             update = { view ->
+                playerViewRef = view
                 runCatching {
                     if (view.player !== exoPlayer) view.player = exoPlayer
                     view.resizeMode = when (aspectMode) {
@@ -958,6 +965,10 @@ fun PlayerScreen(
                         )
                     }
                 }
+            },
+            onRelease = { view ->
+                runCatching { view.player = null }
+                if (playerViewRef === view) playerViewRef = null
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -1630,7 +1641,7 @@ fun PlayerScreen(
                                         color = InkMuted,
                                     )
                                 }
-                                itemsIndexed(dubs, key = { _, d -> "dub_${d.subjectId}" }) { idx, dub ->
+                                itemsIndexed(dubs, key = { idx, d -> "dub_${idx}_${d.subjectId}" }) { idx, dub ->
                                     val selected = dub.subjectId == currentSubjectId
                                     DrawerRow(
                                         title = dub.languageName,
@@ -1661,7 +1672,7 @@ fun PlayerScreen(
                                         modifier = Modifier.padding(top = if (dubs.isNotEmpty()) 10.dp else 0.dp),
                                     )
                                 }
-                                itemsIndexed(embeddedAudioTracks) { idx, track ->
+                                itemsIndexed(embeddedAudioTracks, key = { idx, t -> "eat_${idx}_${t.label}" }) { idx, track ->
                                     DrawerRow(
                                         title = track.label,
                                         trailing = if (track.isSelected) {
@@ -1819,12 +1830,16 @@ fun PlayerScreen(
                                 }
                             }
                         }
-                        if (curSe != null) {
+                        if (curSe != null && curSe.episodeCount > 0) {
+                            val safeEpCount = curSe.episodeCount.coerceIn(1, 500)
                             LazyColumn(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.weight(1f),
                             ) {
-                                items((1..curSe.episodeCount).toList()) { ep ->
+                                itemsIndexed(
+                                    items = (1..safeEpCount).toList(),
+                                    key = { idx, ep -> "pe_${curSe.seasonNumber}_${idx}_$ep" },
+                                ) { _, ep ->
                                     val isPlayingThis = curSe.seasonNumber == destination.season && ep == destination.episode
                                     val prog = episodeProgress[AppPreferences.episodeKey(destination.item.id, curSe.seasonNumber, ep)]
                                     DrawerRow(
@@ -1859,7 +1874,7 @@ fun PlayerScreen(
                                         contentPadding = PaddingValues(vertical = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
-                                        items(SubtitleSize.entries) { sz ->
+                                        itemsIndexed(SubtitleSize.entries, key = { idx, sz -> "ssz_${idx}_${sz.id}" }) { _, sz ->
                                             DrawerSmallChip(
                                                 label = sz.label,
                                                 selected = settings.subtitleStyle.size == sz,
@@ -1873,7 +1888,7 @@ fun PlayerScreen(
                                         contentPadding = PaddingValues(vertical = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
-                                        items(SubtitleColor.entries) { col ->
+                                        itemsIndexed(SubtitleColor.entries, key = { idx, col -> "sco_${idx}_${col.id}" }) { _, col ->
                                             DrawerSmallChip(
                                                 label = col.label,
                                                 selected = settings.subtitleStyle.color == col,
@@ -1886,7 +1901,7 @@ fun PlayerScreen(
                                         contentPadding = PaddingValues(vertical = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
-                                        items(SubtitleBackground.entries) { bg ->
+                                        itemsIndexed(SubtitleBackground.entries, key = { idx, bg -> "sbg_${idx}_${bg.id}" }) { _, bg ->
                                             DrawerSmallChip(
                                                 label = bg.label,
                                                 selected = settings.subtitleStyle.background == bg,
@@ -1974,7 +1989,10 @@ fun PlayerScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.weight(1f),
                         ) {
-                            itemsIndexed(playback?.availableStreams.orEmpty()) { idx, stream ->
+                            itemsIndexed(
+                                items = playback?.availableStreams.orEmpty(),
+                                key = { idx, s -> "pq_${idx}_${s.resourceId}_${s.resolution}" },
+                            ) { idx, stream ->
                                 DrawerRow(
                                     title = "${stream.qualityLabel} · ${stream.codecLabel}",
                                     trailing = if (stream.sizeBytes > 0) "${stream.sizeBytes / (1024 * 1024)} MB" else "",
@@ -2020,7 +2038,7 @@ fun PlayerScreen(
 
                     PlayerDrawer.SPEED -> {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            itemsIndexed(SPEED_OPTIONS) { idx, sp ->
+                            itemsIndexed(SPEED_OPTIONS, key = { idx, sp -> "psp_${idx}_$sp" }) { idx, sp ->
                                 DrawerRow(
                                     title = if (sp == 1.0f) "Normal (1.0x)" else "${sp}x",
                                     trailing = "",
@@ -2041,7 +2059,7 @@ fun PlayerScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.weight(1f),
                         ) {
-                            itemsIndexed(AppMetadata.SLEEP_TIMER_OPTIONS) { idx, mins ->
+                            itemsIndexed(AppMetadata.SLEEP_TIMER_OPTIONS, key = { idx, mins -> "psl_${idx}_$mins" }) { idx, mins ->
                                 DrawerRow(
                                     title = AppMetadata.formatSleepLongLabel(mins),
                                     trailing = if (mins > 0 && sleepTimerMinutes == mins) "ACTIVE" else "",

@@ -7,14 +7,20 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.example.arialtv.util.CrashLogger
 
 /**
  * Low-RAM Android TV Coil configuration:
  * - Lean 10% memory cache & 40 MB disk cache to avoid GC pauses / OOM on 1–2 GB TV boxes.
- * - RGB_565 + hardware bitmaps + crossfade disabled (no double-bitmap GPU spikes during scrolling).
+ * - RGB_565 + software bitmaps (avoids HWUI/RenderThread hardware-bitmap crashes on Android TV 14) + crossfade disabled.
  * - Immediate memory cache eviction on Android TV trim/low-memory signals.
  */
 class ArialTvApplication : Application(), ImageLoaderFactory {
+    override fun onCreate() {
+        super.onCreate()
+        CrashLogger.install(this)
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .memoryCache {
@@ -29,7 +35,7 @@ class ArialTvApplication : Application(), ImageLoaderFactory {
                     .build()
             }
             .allowRgb565(true)
-            .allowHardware(true)
+            .allowHardware(false)
             .respectCacheHeaders(false)
             .crossfade(false)
             .build()
@@ -37,7 +43,9 @@ class ArialTvApplication : Application(), ImageLoaderFactory {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN ||
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+        ) {
             runCatching { Coil.imageLoader(this).memoryCache?.clear() }
         }
     }

@@ -46,6 +46,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
@@ -88,7 +90,7 @@ private enum class SettingsSection(val label: String, val icon: ImageVector) {
     SUBTITLES("Subtitles", Icons.Rounded.ClosedCaption),
     TIMERS("Timers", Icons.Rounded.Bedtime),
     LANGUAGE("Audio & Lang", Icons.Rounded.Language),
-    PRIVACY("History", Icons.Rounded.DeleteOutline),
+    PRIVACY("Safety & Data", Icons.Rounded.DeleteOutline),
     ADVANCED("Advanced", Icons.Rounded.Tune),
     ABOUT("About", Icons.Rounded.Info),
 }
@@ -106,6 +108,7 @@ fun SettingsScreen(
     onBridgeUrlChange: (String) -> Unit,
     onLanguageChange: (CatalogLanguage) -> Unit,
     onPreferredAudioChange: (PreferredAudioLanguage) -> Unit,
+    onAdultFilterChange: (Boolean) -> Unit,
     onQualityChange: (PreferredQuality) -> Unit,
     onCodecChange: (PreferredCodec) -> Unit,
     onAutoPlayNextChange: (Boolean) -> Unit,
@@ -117,6 +120,8 @@ fun SettingsScreen(
     onUpdateSubtitleStyle: ((SubtitleStyle) -> SubtitleStyle) -> Unit,
     onTestConnection: () -> Unit,
     onCheckForUpdates: () -> Unit,
+    onDownloadAndInstallUpdate: () -> Unit,
+    onClearCrashLog: () -> Unit,
     onClearWatchHistory: () -> Unit,
     onClearSearchHistory: () -> Unit,
     onClearWatchlist: () -> Unit,
@@ -191,6 +196,7 @@ fun SettingsScreen(
                         onBridgeUrlChange = onBridgeUrlChange,
                         onLanguageChange = onLanguageChange,
                         onPreferredAudioChange = onPreferredAudioChange,
+                        onAdultFilterChange = onAdultFilterChange,
                         onQualityChange = onQualityChange,
                         onCodecChange = onCodecChange,
                         onAutoPlayNextChange = onAutoPlayNextChange,
@@ -202,6 +208,8 @@ fun SettingsScreen(
                         onUpdateSubtitleStyle = onUpdateSubtitleStyle,
                         onTestConnection = onTestConnection,
                         onCheckForUpdates = onCheckForUpdates,
+                        onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
+                        onClearCrashLog = onClearCrashLog,
                         onClearWatchHistory = onClearWatchHistory,
                         onClearSearchHistory = onClearSearchHistory,
                         onClearWatchlist = onClearWatchlist,
@@ -235,6 +243,7 @@ fun SettingsScreen(
                     onBridgeUrlChange = onBridgeUrlChange,
                     onLanguageChange = onLanguageChange,
                     onPreferredAudioChange = onPreferredAudioChange,
+                    onAdultFilterChange = onAdultFilterChange,
                     onQualityChange = onQualityChange,
                     onCodecChange = onCodecChange,
                     onAutoPlayNextChange = onAutoPlayNextChange,
@@ -246,6 +255,8 @@ fun SettingsScreen(
                     onUpdateSubtitleStyle = onUpdateSubtitleStyle,
                     onTestConnection = onTestConnection,
                     onCheckForUpdates = onCheckForUpdates,
+                    onDownloadAndInstallUpdate = onDownloadAndInstallUpdate,
+                    onClearCrashLog = onClearCrashLog,
                     onClearWatchHistory = onClearWatchHistory,
                     onClearSearchHistory = onClearSearchHistory,
                     onClearWatchlist = onClearWatchlist,
@@ -272,6 +283,7 @@ private fun SettingsSectionDetail(
     onBridgeUrlChange: (String) -> Unit,
     onLanguageChange: (CatalogLanguage) -> Unit,
     onPreferredAudioChange: (PreferredAudioLanguage) -> Unit,
+    onAdultFilterChange: (Boolean) -> Unit,
     onQualityChange: (PreferredQuality) -> Unit,
     onCodecChange: (PreferredCodec) -> Unit,
     onAutoPlayNextChange: (Boolean) -> Unit,
@@ -283,6 +295,8 @@ private fun SettingsSectionDetail(
     onUpdateSubtitleStyle: ((SubtitleStyle) -> SubtitleStyle) -> Unit,
     onTestConnection: () -> Unit,
     onCheckForUpdates: () -> Unit,
+    onDownloadAndInstallUpdate: () -> Unit,
+    onClearCrashLog: () -> Unit,
     onClearWatchHistory: () -> Unit,
     onClearSearchHistory: () -> Unit,
     onClearWatchlist: () -> Unit,
@@ -486,6 +500,21 @@ private fun SettingsSectionDetail(
 
             SettingsSection.PRIVACY -> {
                 item {
+                    SettingGroup(
+                        title = "Adult & Erotic Content Filter",
+                        subtitle = "Hides adult, erotic, softcore, 18+, and short-clip content across Home, Categories, and Search.",
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SettingsPill("On (Strict)", settings.adultFilterEnabled) {
+                                if (!settings.adultFilterEnabled) onAdultFilterChange(true)
+                            }
+                            SettingsPill("Off", !settings.adultFilterEnabled) {
+                                if (settings.adultFilterEnabled) onAdultFilterChange(false)
+                            }
+                        }
+                    }
+                }
+                item {
                     SettingGroup(title = "Clear Saved Data") {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             SettingsPill("Clear Watch History ($watchHistoryCount)", false, destructive = true) {
@@ -609,7 +638,7 @@ private fun SettingsSectionDetail(
                         }
 
                         Text(
-                            text = "A fast, minimalist Android TV streaming experience inspired by Nothing OS and YouTube TV — featuring live catalog filtering, custom subtitles, FFmpeg multi-codec playback, and intuitive remote navigation.",
+                            text = "A fast, minimalist Android TV streaming experience inspired by Nothing OS and YouTube TV — featuring strict family-safe filtering, curated expandable categories, live multi-filter explore, custom subtitles, and resilient FFmpeg playback.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = InkSecondary,
                         )
@@ -625,17 +654,110 @@ private fun SettingsSectionDetail(
                         Box(Modifier.fillMaxWidth().height(1.dp).background(DividerHairline))
 
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            SettingsPill(
-                                label = if (settingsUiState.isCheckingUpdate) "Checking Updates..." else "Check for Updates",
-                                selected = false,
-                                onClick = onCheckForUpdates,
-                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                SettingsPill(
+                                    label = if (settingsUiState.isCheckingUpdate) "Checking Updates..." else "Check for Updates",
+                                    selected = false,
+                                    onClick = onCheckForUpdates,
+                                )
+
+                                val rel = settingsUiState.availableUpdate
+                                if (rel != null && !rel.apkDownloadUrl.isNullOrBlank()) {
+                                    val installLabel = when {
+                                        settingsUiState.isDownloadingUpdate -> "Downloading ${settingsUiState.downloadProgressPercent}%..."
+                                        settingsUiState.downloadedApkPath != null -> "Install Update Now (${rel.tagName})"
+                                        else -> "Download & Install ${rel.tagName}"
+                                    }
+                                    SettingsPill(
+                                        label = installLabel,
+                                        selected = true,
+                                        onClick = onDownloadAndInstallUpdate,
+                                    )
+                                }
+                            }
+
+                            if (settingsUiState.isDownloadingUpdate) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(CanvasBlack),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth((settingsUiState.downloadProgressPercent / 100f).coerceIn(0.03f, 1f))
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(StatusGreen),
+                                    )
+                                }
+                            }
+
+                            val relNotes = settingsUiState.availableUpdate?.releaseNotes.orEmpty()
+                            if (relNotes.isNotBlank()) {
+                                Text(
+                                    text = "RELEASE ${settingsUiState.availableUpdate?.tagName}: $relNotes",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = InkSecondary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+
                             val updateMsg = settingsUiState.updateStatusMessage
                             if (!updateMsg.isNullOrBlank()) {
                                 Text(
                                     text = updateMsg,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = InkSecondary,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    SettingGroup(
+                        title = "Crash Diagnostics",
+                        subtitle = "Captures the last unexpected crash stacktrace locally on this TV.",
+                    ) {
+                        val crashLog = settingsUiState.lastCrashLog
+                        if (crashLog.isNullOrBlank()) {
+                            Text(
+                                text = "No crashes recorded on this device.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = StatusGreen,
+                            )
+                        } else {
+                            val preview = remember(crashLog) {
+                                crashLog.lines().take(12).joinToString("\n")
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(CanvasBlack)
+                                        .padding(14.dp),
+                                ) {
+                                    Text(
+                                        text = preview,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = InkSecondary,
+                                        maxLines = 12,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                SettingsPill(
+                                    label = "Clear Crash Log",
+                                    selected = false,
+                                    destructive = true,
+                                    onClick = onClearCrashLog,
                                 )
                             }
                         }

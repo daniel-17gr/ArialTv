@@ -8,6 +8,7 @@ import com.example.arialtv.data.model.AppSettings
 import com.example.arialtv.data.model.AspectRatioMode
 import com.example.arialtv.data.model.CatalogLanguage
 import com.example.arialtv.data.model.CatalogRow
+import com.example.arialtv.data.model.CategoryQuery
 import com.example.arialtv.data.model.ConnectionMode
 import com.example.arialtv.data.model.ConnectionTestResult
 import com.example.arialtv.data.model.DubOption
@@ -22,10 +23,16 @@ import com.example.arialtv.data.model.ResolvedPlayback
 import com.example.arialtv.data.model.SeasonInfo
 import com.example.arialtv.data.model.SubtitleStyle
 import com.example.arialtv.data.model.WatchProgress
+import com.example.arialtv.data.repository.ContentFilter
 import com.example.arialtv.data.repository.MediaRepository
 import com.example.arialtv.data.storage.AppPreferences
+import com.example.arialtv.data.update.AppUpdater
+import com.example.arialtv.data.update.GithubReleaseInfo
+import com.example.arialtv.data.update.InstallLaunchResult
+import com.example.arialtv.data.update.UpdateCheckResult
+import com.example.arialtv.util.CrashLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,11 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
+import java.io.File
 
 enum class TvNavTab(val label: String) {
     SEARCH("Search"),
@@ -51,6 +54,7 @@ enum class TvNavTab(val label: String) {
 sealed interface AppDestination {
     data object Browse : AppDestination
     data class Details(val item: MediaItem) : AppDestination
+    data class Category(val query: CategoryQuery) : AppDestination
     data class Player(
         val item: MediaItem,
         val season: Int = 0,
@@ -68,6 +72,7 @@ data class CatalogTabState(
     val focusedItem: MediaItem? = null,
     val focusedCategory: String = "Featured",
     val error: String? = null,
+    val activeChannelId: Int = 1,
     val activeGenre: String = "All",
     val activeYear: String = "All",
     val activeSort: String = "ForYou",
@@ -81,6 +86,18 @@ data class CatalogTabState(
     val isFilterActive: Boolean
         get() = activeGenre != "All" || activeYear != "All" || activeSort != "ForYou" || activeCountry != "All"
 }
+
+data class CategoryUiState(
+    val query: CategoryQuery? = null,
+    val activeSort: String = "Hottest",
+    val activeYear: String = "All",
+    val activeCountry: String = "All",
+    val isLoading: Boolean = false,
+    val items: List<MediaItem> = emptyList(),
+    val page: Int = 1,
+    val hasMore: Boolean = false,
+    val error: String? = null,
+)
 
 data class SearchUiState(
     val query: String = "",
@@ -118,6 +135,11 @@ data class SettingsUiState(
     val testResult: ConnectionTestResult? = null,
     val isCheckingUpdate: Boolean = false,
     val updateStatusMessage: String? = null,
+    val availableUpdate: GithubReleaseInfo? = null,
+    val isDownloadingUpdate: Boolean = false,
+    val downloadProgressPercent: Int = 0,
+    val downloadedApkPath: String? = null,
+    val lastCrashLog: String? = null,
 )
 
 data class ArialTvUiState(
@@ -127,8 +149,9 @@ data class ArialTvUiState(
     val showExitDialog: Boolean = false,
     val settings: AppSettings = AppSettings(),
     val homeState: CatalogTabState = CatalogTabState(isLoading = true),
-    val moviesState: CatalogTabState = CatalogTabState(),
-    val seriesState: CatalogTabState = CatalogTabState(),
+    val moviesState: CatalogTabState = CatalogTabState(activeChannelId = 1),
+    val seriesState: CatalogTabState = CatalogTabState(activeChannelId = 2),
+    val categoryState: CategoryUiState = CategoryUiState(),
     val searchState: SearchUiState = SearchUiState(),
     val detailState: DetailUiState = DetailUiState(),
     val playerState: PlayerUiState = PlayerUiState(),
@@ -158,6 +181,9 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             episodeProgress = preferences.loadEpisodeProgressMap(),
             searchHistory = preferences.loadSearchHistory(),
             watchlist = preferences.loadWatchlist(),
+            settingsState = SettingsUiState(
+                lastCrashLog = CrashLogger.readLastCrash(application),
+            ),
         ),
     )
     val uiState: StateFlow<ArialTvUiState> = _uiState.asStateFlow()
@@ -169,7 +195,10 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     private var suggestJob: Job? = null
     private var trendingJob: Job? = null
     private var recommendationJob: Job? = null
+    private var categoryJob: Job? = null
     private var toastJob: Job? = null
+    private var updateJob: Job? = null
+    private val catalogJobs = mutableMapOf<TvNavTab, Job>()
     private val filterJobs = mutableMapOf<TvNavTab, Job>()
     private var sleepTimerJob: Job? = null
 
@@ -181,28 +210,36 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     fun showToast(message: String) {
         toastJob?.cancel()
         _uiState.update { it.copy(toastMessage = message) }
-        toastJob = viewModelScope.launch {
+        toastJob = viewModelScope.launch(safeHandler) {
             delay(2_400L)
             _uiState.update { it.copy(toastMessage = null) }
         }
     }
 
     private fun loadPersonalRecommendations() {
-        val anchor = _uiState.value.watchHistory.firstOrNull()?.item ?: return
-        recommendationJob?.cancel()
         val settings = _uiState.value.settings
-        recommendationJob = viewModelScope.launch {
-            val similar = runCatching { repository.fetchSimilarItems(settings, anchor) }
-                .getOrDefault(emptyList())
-            if (similar.isNotEmpty()) {
-                _uiState.update {
-                    it.copy(
-                        recommendedRow = CatalogRow(
-                            category = "Because You Watched ${anchor.title}",
-                            items = similar,
-                        ),
-                    )
+        val anchor = _uiState.value.watchHistory
+            .firstOrNull { ContentFilter.isSafeContent(it.item, settings.adultFilterEnabled) }
+            ?.item
+            ?: return
+        recommendationJob?.cancel()
+        recommendationJob = viewModelScope.launch(safeHandler) {
+            try {
+                val similar = repository.fetchSimilarItems(settings, anchor)
+                if (similar.isNotEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            recommendedRow = CatalogRow(
+                                category = "Because You Watched ${anchor.title}",
+                                items = similar,
+                            ),
+                        )
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Non-critical recommendation strip
             }
         }
     }
@@ -242,6 +279,11 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun refreshCurrentTab() {
+        val dest = _uiState.value.destination
+        if (dest is AppDestination.Category) {
+            loadCategoryPage(page = 1, append = false)
+            return
+        }
         when (val tab = _uiState.value.activeTab) {
             TvNavTab.HOME, TvNavTab.MOVIES, TvNavTab.SERIES -> {
                 val tabState = getTabState(tab)
@@ -252,6 +294,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         year = tabState.activeYear,
                         sort = tabState.activeSort,
                         country = tabState.activeCountry,
+                        channelId = tabState.activeChannelId,
                     )
                 } else {
                     loadCatalogForTab(tab, forceRefresh = true)
@@ -279,12 +322,19 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         year: String = getTabState(tab).activeYear,
         sort: String = getTabState(tab).activeSort,
         country: String = getTabState(tab).activeCountry,
+        channelId: Int = getTabState(tab).activeChannelId,
     ) {
+        val effectiveChannelId = when (tab) {
+            TvNavTab.MOVIES -> 1
+            TvNavTab.SERIES -> 2
+            else -> channelId
+        }
         val isAll = genre == "All" && year == "All" && sort == "ForYou" && country == "All"
         filterJobs[tab]?.cancel()
         if (isAll) {
             updateTabState(tab) {
                 it.copy(
+                    activeChannelId = if (tab == TvNavTab.SERIES) 2 else 1,
                     activeGenre = "All",
                     activeYear = "All",
                     activeSort = "ForYou",
@@ -301,6 +351,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
 
         updateTabState(tab) {
             it.copy(
+                activeChannelId = effectiveChannelId,
                 activeGenre = genre,
                 activeYear = year,
                 activeSort = sort,
@@ -314,12 +365,11 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         }
 
         val settings = _uiState.value.settings
-        val channelId = if (tab == TvNavTab.SERIES) 2 else 1
-        filterJobs[tab] = viewModelScope.launch {
+        filterJobs[tab] = viewModelScope.launch(safeHandler) {
             try {
                 val result = repository.fetchFilteredCatalog(
                     settings = settings,
-                    channelId = channelId,
+                    channelId = effectiveChannelId,
                     genre = genre.takeUnless { it == "All" },
                     year = year.takeUnless { it == "All" },
                     country = country.takeUnless { it == "All" },
@@ -336,12 +386,18 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         filterError = null,
                         focusedItem = result.items.firstOrNull() ?: it.focusedItem,
                         focusedCategory = listOfNotNull(
+                            if (tab == TvNavTab.HOME) {
+                                if (effectiveChannelId == 2) "Series" else "Films"
+                            } else null,
                             genre.takeUnless { g -> g == "All" },
                             year.takeUnless { y -> y == "All" },
+                            country.takeUnless { c -> c == "All" },
                             sort.takeUnless { s -> s == "ForYou" },
                         ).joinToString(" · ").ifBlank { "Filtered" },
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 updateTabState(tab) {
                     it.copy(
@@ -358,14 +414,18 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         if (!current.isFilterActive || current.isFiltering || !current.filterHasMore) return
         val nextPage = current.filterPage + 1
         val settings = _uiState.value.settings
-        val channelId = if (tab == TvNavTab.SERIES) 2 else 1
+        val effectiveChannelId = when (tab) {
+            TvNavTab.MOVIES -> 1
+            TvNavTab.SERIES -> 2
+            else -> current.activeChannelId
+        }
 
         updateTabState(tab) { it.copy(isFiltering = true, filterError = null) }
-        filterJobs[tab] = viewModelScope.launch {
+        filterJobs[tab] = viewModelScope.launch(safeHandler) {
             try {
                 val result = repository.fetchFilteredCatalog(
                     settings = settings,
-                    channelId = channelId,
+                    channelId = effectiveChannelId,
                     genre = current.activeGenre.takeUnless { it == "All" },
                     year = current.activeYear.takeUnless { it == "All" },
                     country = current.activeCountry.takeUnless { it == "All" },
@@ -383,6 +443,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         filterError = null,
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 updateTabState(tab) { it.copy(isFiltering = false) }
             }
@@ -390,7 +452,124 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun clearCatalogFilter(tab: TvNavTab) {
-        applyCatalogFilter(tab = tab, genre = "All", year = "All", sort = "ForYou", country = "All")
+        applyCatalogFilter(
+            tab = tab,
+            genre = "All",
+            year = "All",
+            sort = "ForYou",
+            country = "All",
+            channelId = if (tab == TvNavTab.SERIES) 2 else 1,
+        )
+    }
+
+    // --- Expandable Category Explorer ---
+
+    fun openCategory(query: CategoryQuery) {
+        val current = _uiState.value.destination
+        if (current !is AppDestination.Category || current.query.title != query.title) {
+            backStack.addLast(current)
+        }
+        val cleanSeeds = ContentFilter.filterSafeList(query.seedItems, _uiState.value.settings.adultFilterEnabled)
+        _uiState.update {
+            it.copy(
+                destination = AppDestination.Category(query),
+                categoryState = CategoryUiState(
+                    query = query,
+                    activeSort = query.sort,
+                    activeYear = query.year,
+                    activeCountry = query.country,
+                    isLoading = true,
+                    items = cleanSeeds,
+                    page = 1,
+                    hasMore = false,
+                    error = null,
+                ),
+            )
+        }
+        loadCategoryPage(page = 1, append = false)
+    }
+
+    fun updateCategoryFilters(
+        sort: String = _uiState.value.categoryState.activeSort,
+        year: String = _uiState.value.categoryState.activeYear,
+        country: String = _uiState.value.categoryState.activeCountry,
+    ) {
+        _uiState.update {
+            it.copy(
+                categoryState = it.categoryState.copy(
+                    activeSort = sort,
+                    activeYear = year,
+                    activeCountry = country,
+                    isLoading = true,
+                    items = emptyList(),
+                    page = 1,
+                    hasMore = false,
+                    error = null,
+                ),
+            )
+        }
+        loadCategoryPage(page = 1, append = false)
+    }
+
+    fun loadMoreCategoryItems() {
+        val st = _uiState.value.categoryState
+        if (st.isLoading || !st.hasMore || st.query == null) return
+        loadCategoryPage(page = st.page + 1, append = true)
+    }
+
+    fun retryCategoryLoad() {
+        loadCategoryPage(page = 1, append = false)
+    }
+
+    private fun loadCategoryPage(page: Int, append: Boolean) {
+        val st = _uiState.value.categoryState
+        val query = st.query ?: return
+        val settings = _uiState.value.settings
+        categoryJob?.cancel()
+        _uiState.update {
+            it.copy(categoryState = it.categoryState.copy(isLoading = true, error = null))
+        }
+        categoryJob = viewModelScope.launch(safeHandler) {
+            try {
+                val res = repository.fetchCategoryPage(
+                    settings = settings,
+                    query = query,
+                    sortOverride = st.activeSort,
+                    yearOverride = st.activeYear,
+                    countryOverride = st.activeCountry,
+                    page = page,
+                )
+                _uiState.update { cur ->
+                    val updatedItems = if (append) {
+                        (cur.categoryState.items + res.items).distinctBy { it.id }
+                    } else {
+                        res.items
+                    }
+                    cur.copy(
+                        categoryState = cur.categoryState.copy(
+                            isLoading = false,
+                            items = updatedItems,
+                            page = page,
+                            hasMore = res.hasMore,
+                            error = null,
+                        ),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _uiState.update { cur ->
+                    cur.copy(
+                        categoryState = cur.categoryState.copy(
+                            isLoading = false,
+                            error = if (cur.categoryState.items.isEmpty()) {
+                                "Couldn't load titles for this category. Try again."
+                            } else null,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     fun loadTrendingSearch(force: Boolean = false) {
@@ -400,9 +579,9 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             it.copy(searchState = it.searchState.copy(isLoadingTrending = true))
         }
         val settings = _uiState.value.settings
-        trendingJob = viewModelScope.launch {
+        trendingJob = viewModelScope.launch(safeHandler) {
             try {
-                val rank = repository.fetchTrendingSearch(settings)
+                val rank = repository.fetchTrendingSearch(settings, forceRefresh = force)
                 val combined = buildList {
                     val maxLen = maxOf(rank.movies.size, rank.series.size)
                     for (i in 0 until maxLen) {
@@ -421,6 +600,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         ),
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _uiState.update {
                     it.copy(
@@ -443,10 +624,11 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         }
         if (!forceRefresh && currentTabState.catalog != null) return
 
+        catalogJobs[tab]?.cancel()
         updateTabState(tab) { it.copy(isLoading = true, error = null) }
         val settings = _uiState.value.settings
 
-        viewModelScope.launch {
+        catalogJobs[tab] = viewModelScope.launch(safeHandler) {
             try {
                 val catalog = when (tab) {
                     TvNavTab.HOME -> repository.fetchHome(settings, tabId = 0, forceRefresh = forceRefresh)
@@ -473,7 +655,9 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                 if (forceRefresh && currentTabState.catalog != null) {
                     showToast("Catalog refreshed")
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
                 updateTabState(tab) {
                     it.copy(
                         isLoading = false,
@@ -521,7 +705,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
 
         val settings = _uiState.value.settings
         val filterType = _uiState.value.searchState.selectedFilterType
-        suggestJob = viewModelScope.launch {
+        suggestJob = viewModelScope.launch(safeHandler) {
             delay(320L)
             try {
                 val items = repository.search(settings, trimmed, subjectType = filterType, perPage = 8)
@@ -537,6 +721,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         it
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _uiState.update {
                     it.copy(searchState = it.searchState.copy(isSuggesting = false))
@@ -578,7 +764,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         val settings = _uiState.value.settings
-        searchJob = viewModelScope.launch {
+        searchJob = viewModelScope.launch(safeHandler) {
             try {
                 val results = repository.search(settings, trimmed, subjectType = filterType)
                 _uiState.update {
@@ -590,6 +776,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         ),
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _uiState.update {
                     it.copy(
@@ -672,7 +860,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     private fun loadDetailsFor(item: MediaItem) {
         detailJob?.cancel()
         val settings = _uiState.value.settings
-        detailJob = viewModelScope.launch {
+        detailJob = viewModelScope.launch(safeHandler) {
             try {
                 val details = repository.fetchDetails(settings, item)
                 val historyEntry = _uiState.value.watchHistory.firstOrNull { it.item.id == details.item.id }
@@ -690,7 +878,6 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         ),
                     )
                 }
-                // Load live "More Like This" recommendations right after details arrive
                 val similar = runCatching { repository.fetchSimilarItems(settings, details.item) }
                     .getOrDefault(emptyList())
                 _uiState.update {
@@ -700,6 +887,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         it
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _uiState.update {
                     it.copy(
@@ -754,7 +943,6 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         val detailSnapshot = _uiState.value.detailState.details?.takeIf { it.item.id == item.id }
         val effectiveSeasons = seasonsMeta.ifEmpty { detailSnapshot?.seasons.orEmpty() }
         val effectiveDubs = detailSnapshot?.dubs.orEmpty()
-        // If user explicitly picked a dub on DetailScreen (i.e. item.id matches one of the dubs), honor it
         val explicitFromDetails = detailSnapshot?.dubs?.firstOrNull { it.subjectId == item.id }?.subjectId
 
         val playerDest = AppDestination.Player(
@@ -778,10 +966,6 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         resolveStreamFor(playerDest, requestedResolution)
     }
 
-    /**
-     * Switches to another dubbed audio language directly inside the player while preserving
-     * the exact playback timestamp.
-     */
     fun switchPlayerAudioDub(dubSubjectId: String, resumePositionMs: Long) {
         val dest = _uiState.value.destination as? AppDestination.Player ?: return
         val currentPlayback = _uiState.value.playerState.playback
@@ -893,7 +1077,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     private fun resolveStreamFor(dest: AppDestination.Player, requestedResolution: Int?) {
         playerJob?.cancel()
         val settings = _uiState.value.settings
-        playerJob = viewModelScope.launch {
+        playerJob = viewModelScope.launch(safeHandler) {
             try {
                 val seasons = if (dest.item.isSeries && dest.seasonsMeta.isEmpty() && settings.connectionMode == ConnectionMode.STANDALONE_V3) {
                     runCatching { repository.fetchDetails(settings, dest.item).seasons }.getOrDefault(emptyList())
@@ -932,6 +1116,8 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                         ),
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _uiState.update {
                     it.copy(
@@ -1056,6 +1242,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
             return false
         }
         playerJob?.cancel()
+        categoryJob?.cancel()
         val previous = backStack.removeLastOrNull() ?: AppDestination.Browse
         _uiState.update {
             it.copy(
@@ -1066,7 +1253,7 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         return true
     }
 
-    // --- Settings ---
+    // --- Settings, Adult Filter, Crash Diagnostics & In-App GitHub Updater ---
 
     fun updateConnectionMode(mode: ConnectionMode) {
         updateSettings { it.copy(connectionMode = mode) }
@@ -1086,6 +1273,12 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
     fun updatePreferredAudioLanguage(audioLanguage: PreferredAudioLanguage) {
         updateSettings { it.copy(preferredAudioLanguage = audioLanguage) }
         showToast("Preferred audio: ${audioLanguage.label}")
+    }
+
+    fun updateAdultFilterEnabled(enabled: Boolean) {
+        updateSettings { it.copy(adultFilterEnabled = enabled) }
+        showToast(if (enabled) "Adult & Erotic Filter: On" else "Adult & Erotic Filter: Off")
+        invalidateCatalogs()
     }
 
     fun updatePreferredQuality(quality: PreferredQuality) {
@@ -1133,21 +1326,49 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         showToast("Watch history cleared")
     }
 
+    fun clearCrashLog() {
+        CrashLogger.clearLastCrash(getApplication())
+        _uiState.update {
+            it.copy(settingsState = it.settingsState.copy(lastCrashLog = null))
+        }
+        showToast("Crash log cleared")
+    }
+
     fun runConnectionTest() {
         _uiState.update {
             it.copy(settingsState = it.settingsState.copy(isTesting = true, testResult = null))
         }
         val settings = _uiState.value.settings
-        viewModelScope.launch {
-            val result = repository.testConnection(settings)
-            _uiState.update {
-                it.copy(settingsState = it.settingsState.copy(isTesting = false, testResult = result))
+        viewModelScope.launch(safeHandler) {
+            try {
+                val result = repository.testConnection(settings)
+                _uiState.update {
+                    it.copy(settingsState = it.settingsState.copy(isTesting = false, testResult = result))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        settingsState = it.settingsState.copy(
+                            isTesting = false,
+                            testResult = ConnectionTestResult(
+                                success = false,
+                                host = "",
+                                latencyMs = 0L,
+                                hasSessionToken = false,
+                                sectionCount = 0,
+                                message = e.message ?: "Connection check failed",
+                            ),
+                        ),
+                    )
+                }
             }
         }
     }
 
     fun checkForGithubUpdate() {
-        if (_uiState.value.settingsState.isCheckingUpdate) return
+        if (_uiState.value.settingsState.isCheckingUpdate || _uiState.value.settingsState.isDownloadingUpdate) return
         _uiState.update {
             it.copy(
                 settingsState = it.settingsState.copy(
@@ -1156,46 +1377,155 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
                 ),
             )
         }
-        viewModelScope.launch {
-            val statusMsg = withContext(Dispatchers.IO) {
-                runCatching {
-                    val client = OkHttpClient.Builder()
-                        .connectTimeout(10, TimeUnit.SECONDS)
-                        .readTimeout(10, TimeUnit.SECONDS)
-                        .build()
-                    val req = Request.Builder()
-                        .url(AppMetadata.GITHUB_RELEASES_API)
-                        .header("Accept", "application/vnd.github+json")
-                        .header("User-Agent", "ArialTV/${AppMetadata.VERSION_NAME}")
-                        .get()
-                        .build()
-                    client.newCall(req).execute().use { resp ->
-                        when {
-                            resp.code == 404 -> "Current version v${AppMetadata.VERSION_NAME} (no GitHub release published yet)"
-                            !resp.isSuccessful -> "Couldn't check updates right now (HTTP ${resp.code})"
-                            else -> {
-                                val json = JSONObject(resp.body?.string().orEmpty())
-                                val latestTag = json.optString("tag_name", "").trim()
-                                val cleanLatest = latestTag.removePrefix("v").removePrefix("V")
-                                if (cleanLatest.isEmpty() || cleanLatest == AppMetadata.VERSION_NAME) {
-                                    "You're up to date (v${AppMetadata.VERSION_NAME})"
-                                } else {
-                                    "Update available: $latestTag — download on ${AppMetadata.GITHUB_HANDLE}/ArialTv"
-                                }
-                            }
-                        }
-                    }
-                }.getOrElse {
-                    "Unable to reach GitHub right now."
-                }
+        viewModelScope.launch(safeHandler) {
+            val checkResult = try {
+                AppUpdater.checkLatestRelease(AppMetadata.VERSION_NAME)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                UpdateCheckResult.Error("Unable to reach GitHub right now.")
             }
-            _uiState.update {
-                it.copy(
-                    settingsState = it.settingsState.copy(
+
+            _uiState.update { cur ->
+                val nextSettingsState = when (checkResult) {
+                    is UpdateCheckResult.UpdateAvailable -> {
+                        val rel = checkResult.release
+                        val msg = if (rel.apkDownloadUrl != null) {
+                            "Update ${rel.tagName} ready to download & install"
+                        } else {
+                            "Update ${rel.tagName} published at ${rel.htmlUrl}"
+                        }
+                        cur.settingsState.copy(
+                            isCheckingUpdate = false,
+                            availableUpdate = rel,
+                            downloadedApkPath = null,
+                            updateStatusMessage = msg,
+                        )
+                    }
+                    is UpdateCheckResult.UpToDate -> cur.settingsState.copy(
                         isCheckingUpdate = false,
-                        updateStatusMessage = statusMsg,
-                    ),
+                        availableUpdate = null,
+                        downloadedApkPath = null,
+                        updateStatusMessage = "You're up to date (v${checkResult.currentVersion})",
+                    )
+                    is UpdateCheckResult.NoReleaseYet -> cur.settingsState.copy(
+                        isCheckingUpdate = false,
+                        availableUpdate = null,
+                        downloadedApkPath = null,
+                        updateStatusMessage = "Current version v${checkResult.currentVersion} (no GitHub release published yet)",
+                    )
+                    is UpdateCheckResult.Error -> cur.settingsState.copy(
+                        isCheckingUpdate = false,
+                        updateStatusMessage = checkResult.message,
+                    )
+                }
+                cur.copy(settingsState = nextSettingsState)
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate() {
+        val currentSettingsState = _uiState.value.settingsState
+        if (currentSettingsState.isDownloadingUpdate) return
+
+        val existingPath = currentSettingsState.downloadedApkPath
+        if (!existingPath.isNullOrBlank()) {
+            val existingFile = File(existingPath)
+            if (existingFile.exists() && existingFile.length() > 100_000L) {
+                installDownloadedApk(existingFile)
+                return
+            }
+        }
+
+        val release = currentSettingsState.availableUpdate ?: return
+        val apkUrl = release.apkDownloadUrl ?: return
+        val fileName = release.apkAssetName ?: "ArialTv-${release.tagName}.apk"
+
+        updateJob?.cancel()
+        _uiState.update {
+            it.copy(
+                settingsState = it.settingsState.copy(
+                    isDownloadingUpdate = true,
+                    downloadProgressPercent = 0,
+                    updateStatusMessage = "Downloading ${release.tagName}...",
+                ),
+            )
+        }
+
+        updateJob = viewModelScope.launch(safeHandler) {
+            try {
+                val apkFile = AppUpdater.downloadApk(
+                    context = getApplication(),
+                    downloadUrl = apkUrl,
+                    fileName = fileName,
+                    onProgress = { pct ->
+                        _uiState.update { cur ->
+                            cur.copy(
+                                settingsState = cur.settingsState.copy(
+                                    downloadProgressPercent = pct,
+                                    updateStatusMessage = "Downloading ${release.tagName}... $pct%",
+                                ),
+                            )
+                        }
+                    },
                 )
+                _uiState.update { cur ->
+                    cur.copy(
+                        settingsState = cur.settingsState.copy(
+                            isDownloadingUpdate = false,
+                            downloadProgressPercent = 100,
+                            downloadedApkPath = apkFile.absolutePath,
+                        ),
+                    )
+                }
+                installDownloadedApk(apkFile)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { cur ->
+                    cur.copy(
+                        settingsState = cur.settingsState.copy(
+                            isDownloadingUpdate = false,
+                            updateStatusMessage = "Download failed: ${e.message ?: "Try again"}",
+                        ),
+                    )
+                }
+                showToast("Update download failed")
+            }
+        }
+    }
+
+    private fun installDownloadedApk(apkFile: File) {
+        when (val result = AppUpdater.launchApkInstaller(getApplication(), apkFile)) {
+            InstallLaunchResult.InstallerLaunched -> {
+                _uiState.update { cur ->
+                    cur.copy(
+                        settingsState = cur.settingsState.copy(
+                            updateStatusMessage = "Installer opened — confirm Update on your TV.",
+                        ),
+                    )
+                }
+                showToast("Opening installer...")
+            }
+            InstallLaunchResult.NeedsUnknownSourcesPermission -> {
+                _uiState.update { cur ->
+                    cur.copy(
+                        settingsState = cur.settingsState.copy(
+                            updateStatusMessage = "Enable 'Install unknown apps' for Arial TV, then press Install Update Now.",
+                        ),
+                    )
+                }
+                showToast("Allow unknown apps permission")
+            }
+            is InstallLaunchResult.Failed -> {
+                _uiState.update { cur ->
+                    cur.copy(
+                        settingsState = cur.settingsState.copy(
+                            updateStatusMessage = result.reason,
+                        ),
+                    )
+                }
+                showToast("Couldn't open installer")
             }
         }
     }
@@ -1211,9 +1541,15 @@ class ArialTvViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update {
             it.copy(
                 homeState = CatalogTabState(),
-                moviesState = CatalogTabState(),
-                seriesState = CatalogTabState(),
-                searchState = it.searchState.copy(hasLoadedTrending = false, trendingItems = emptyList(), trendingTerms = emptyList()),
+                moviesState = CatalogTabState(activeChannelId = 1),
+                seriesState = CatalogTabState(activeChannelId = 2),
+                searchState = it.searchState.copy(
+                    hasLoadedTrending = false,
+                    trendingItems = emptyList(),
+                    trendingTerms = emptyList(),
+                    suggestions = emptyList(),
+                    results = emptyList(),
+                ),
             )
         }
         loadCatalogForTab(TvNavTab.HOME, forceRefresh = true)

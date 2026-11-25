@@ -45,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
@@ -173,14 +172,12 @@ fun SearchScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .focusRequester(searchInputFocus)
-                                .focusProperties { down = activeFilterRequester }
                                 .onFocusChanged { inputFocused = it.isFocused }
                                 .onPreviewKeyEvent { keyEvent ->
                                     if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&
                                         keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
                                     ) {
-                                        runCatching { activeFilterRequester.requestFocus() }
-                                        true
+                                        runCatching { activeFilterRequester.requestFocus() }.isSuccess
                                     } else {
                                         false
                                     }
@@ -199,7 +196,6 @@ fun SearchScreen(
                             ),
                             border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
-                            modifier = Modifier.focusProperties { down = activeFilterRequester },
                         ) {
                             Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
                                 Icon(Icons.Rounded.Close, contentDescription = "Clear", modifier = Modifier.size(15.dp))
@@ -229,7 +225,6 @@ fun SearchScreen(
                 ),
                 border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-                modifier = Modifier.focusProperties { down = activeFilterRequester },
             ) {
                 Box(
                     modifier = Modifier.size(50.dp),
@@ -252,7 +247,6 @@ fun SearchScreen(
                 ),
                 border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
-                modifier = Modifier.focusProperties { down = activeFilterRequester },
             ) {
                 Box(
                     modifier = Modifier
@@ -265,7 +259,7 @@ fun SearchScreen(
             }
         }
 
-        // Filter Pills (All / Films / Series) — explicitly D-pad reachable from search bar!
+        // Filter Pills (All / Films / Series)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -276,35 +270,19 @@ fun SearchScreen(
             SearchFilterChip(
                 label = "All",
                 selected = searchState.selectedFilterType == 0,
-                modifier = Modifier
-                    .focusRequester(filterAllFocus)
-                    .focusProperties {
-                        up = searchInputFocus
-                        right = filterFilmsFocus
-                    },
+                modifier = Modifier.focusRequester(filterAllFocus),
                 onClick = { onFilterChange(0) },
             )
             SearchFilterChip(
                 label = "Films",
                 selected = searchState.selectedFilterType == 1,
-                modifier = Modifier
-                    .focusRequester(filterFilmsFocus)
-                    .focusProperties {
-                        up = searchInputFocus
-                        left = filterAllFocus
-                        right = filterSeriesFocus
-                    },
+                modifier = Modifier.focusRequester(filterFilmsFocus),
                 onClick = { onFilterChange(1) },
             )
             SearchFilterChip(
                 label = "Series",
                 selected = searchState.selectedFilterType == 2,
-                modifier = Modifier
-                    .focusRequester(filterSeriesFocus)
-                    .focusProperties {
-                        up = searchInputFocus
-                        left = filterFilmsFocus
-                    },
+                modifier = Modifier.focusRequester(filterSeriesFocus),
                 onClick = { onFilterChange(2) },
             )
         }

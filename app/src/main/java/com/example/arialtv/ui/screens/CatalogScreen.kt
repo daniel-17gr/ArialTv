@@ -1,5 +1,6 @@
 package com.example.arialtv.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -53,6 +54,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.example.arialtv.data.model.CatalogFilterOption
 import com.example.arialtv.data.model.CatalogRow
+import com.example.arialtv.data.model.CategoryQuery
 import com.example.arialtv.data.model.MediaItem
 import com.example.arialtv.data.model.WatchProgress
 import com.example.arialtv.ui.components.ContinueWatchingRail
@@ -60,6 +62,7 @@ import com.example.arialtv.ui.components.TvHeroBanner
 import com.example.arialtv.ui.components.TvMediaCard
 import com.example.arialtv.ui.components.TvMediaRail
 import com.example.arialtv.ui.theme.CanvasBlack
+import com.example.arialtv.ui.theme.InkMuted
 import com.example.arialtv.ui.theme.InkOnSelected
 import com.example.arialtv.ui.theme.InkOnWhite
 import com.example.arialtv.ui.theme.InkPrimary
@@ -73,23 +76,44 @@ import com.example.arialtv.ui.theme.SurfaceTonal
 import com.example.arialtv.ui.viewmodel.CatalogTabState
 import kotlinx.coroutines.delay
 
-private val QUICK_SORT_FILTERS = listOf(
-    "Hottest" to "Trending",
-    "Latest" to "Latest",
+private val SORT_FILTERS = listOf(
+    "ForYou" to "For You",
+    "Hottest" to "Most Popular",
+    "TopRated" to "Top Rated",
+    "Latest" to "Newest",
 )
 
-private val QUICK_YEAR_FILTERS = listOf("2026", "2025")
+private val YEAR_FILTERS = listOf("All", "2026", "2025", "2024", "2023", "2022", "2021", "2020")
 
-private val FALLBACK_GENRES = listOf(
+private val REGION_FILTERS = listOf(
+    "All" to "All Regions",
+    "United States" to "USA",
+    "United Kingdom" to "UK",
+    "Korea" to "South Korea",
+    "Japan" to "Japan",
+    "France" to "France",
+    "Spain" to "Spain",
+    "India" to "India",
+    "China" to "China",
+)
+
+private val VERIFIED_DEFAULT_GENRES = listOf(
     "Action",
     "Sci-Fi",
-    "Comedy",
     "Thriller",
-    "Horror",
-    "Drama",
-    "Animation",
-    "Adventure",
     "Crime",
+    "Comedy",
+    "Drama",
+    "Horror",
+    "Animation",
+    "Anime",
+    "Adventure",
+    "Mystery",
+    "Family",
+    "History",
+    "War",
+    "Biography",
+    "Documentary",
 )
 
 @Composable
@@ -99,15 +123,17 @@ fun CatalogScreen(
     watchlist: List<MediaItem>,
     recommendedRow: CatalogRow? = null,
     showPersonalRails: Boolean,
+    showTypeToggle: Boolean = false,
     onItemClick: (MediaItem) -> Unit,
     onPlayNow: (MediaItem) -> Unit,
     onToggleWatchlist: (MediaItem) -> Unit,
     onResumeProgress: (WatchProgress) -> Unit,
     onItemFocused: (MediaItem, String) -> Unit,
     onNextFeatured: (() -> Unit)? = null,
-    onApplyFilter: (genre: String, year: String, sort: String, country: String) -> Unit,
+    onApplyFilter: (genre: String, year: String, sort: String, country: String, channelId: Int) -> Unit,
     onLoadMoreFiltered: () -> Unit,
     onClearFilter: () -> Unit,
+    onExpandCategory: (CategoryQuery) -> Unit,
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -134,7 +160,6 @@ fun CatalogScreen(
             )
         }
         catalog != null -> {
-            // Keep focused hero state local to CatalogScreen so D-pad browsing NEVER recomposes ArialTvApp!
             val defaultHero = remember(catalog) {
                 catalog.featured.firstOrNull() ?: catalog.rows.firstOrNull()?.items?.firstOrNull()
             }
@@ -162,20 +187,12 @@ fun CatalogScreen(
                 }
             }
 
-            // Build genre pills from live MovieBox API `FILTER` chips + clean defaults
             val genreOptions = remember(catalog.filters) {
-                buildList<CatalogFilterOption> {
-                    catalog.filters.forEach { opt ->
-                        if (opt.genre != "All" && none { it.genre.equals(opt.genre, ignoreCase = true) }) {
-                            add(opt)
-                        }
-                    }
-                    FALLBACK_GENRES.forEach { g ->
-                        if (none { it.genre.equals(g, ignoreCase = true) }) {
-                            add(CatalogFilterOption(label = g, genre = g))
-                        }
-                    }
-                }.take(12)
+                if (catalog.filters.isNotEmpty()) {
+                    catalog.filters
+                } else {
+                    VERIFIED_DEFAULT_GENRES.map { CatalogFilterOption(label = it, genre = it) }
+                }
             }
 
             val watchlistIds = remember(watchlist) {
@@ -187,7 +204,6 @@ fun CatalogScreen(
                     .fillMaxSize()
                     .background(CanvasBlack),
             ) {
-                // Full-bleed Hero starts right at y = 0 behind the transparent floating top bar!
                 val hero = displayedHeroItem ?: defaultHero
                 if (hero != null && !tabState.isFilterActive) {
                     TvHeroBanner(
@@ -212,10 +228,10 @@ fun CatalogScreen(
                     )
                 }
 
-                // Live MovieBox API Filter Bar (clears transparent top bar when Hero is hidden)
                 LiveFilterBar(
                     tabState = tabState,
                     genreOptions = genreOptions,
+                    showTypeToggle = showTypeToggle,
                     onApplyFilter = onApplyFilter,
                     onClearFilter = onClearFilter,
                     modifier = if (tabState.isFilterActive) Modifier.padding(top = 56.dp) else Modifier,
@@ -224,10 +240,12 @@ fun CatalogScreen(
                 if (tabState.isFilterActive) {
                     FilteredCatalogGrid(
                         tabState = tabState,
+                        showTypeToggle = showTypeToggle,
                         onItemClick = onItemClick,
                         onItemFocused = { item ->
                             pendingHeroItem = item
                             pendingCategory = tabState.focusedCategory
+                            onItemFocused(item, tabState.focusedCategory)
                         },
                         onLoadMore = onLoadMoreFiltered,
                         onClearFilter = onClearFilter,
@@ -252,6 +270,7 @@ fun CatalogScreen(
                                     onEntryFocused = { progress ->
                                         pendingHeroItem = progress.item
                                         pendingCategory = "Continue Watching"
+                                        onItemFocused(progress.item, "Continue Watching")
                                     },
                                 )
                             }
@@ -266,6 +285,7 @@ fun CatalogScreen(
                                     onItemFocused = { item ->
                                         pendingHeroItem = item
                                         pendingCategory = "My List"
+                                        onItemFocused(item, "My List")
                                     },
                                 )
                             }
@@ -280,6 +300,7 @@ fun CatalogScreen(
                                     onItemFocused = { item ->
                                         pendingHeroItem = item
                                         pendingCategory = "Recommended"
+                                        onItemFocused(item, "Recommended")
                                     },
                                 )
                             }
@@ -294,10 +315,15 @@ fun CatalogScreen(
                                 title = row.category,
                                 items = row.items,
                                 indexPrefix = idx + 1,
+                                previewLimit = 6,
+                                onExpandCategory = row.expandQuery?.let { query ->
+                                    { onExpandCategory(query) }
+                                },
                                 onItemClick = onItemClick,
                                 onItemFocused = { focused ->
                                     pendingHeroItem = focused
                                     pendingCategory = row.category
+                                    onItemFocused(focused, row.category)
                                 },
                             )
                         }
@@ -312,61 +338,215 @@ fun CatalogScreen(
 private fun LiveFilterBar(
     tabState: CatalogTabState,
     genreOptions: List<CatalogFilterOption>,
-    onApplyFilter: (genre: String, year: String, sort: String, country: String) -> Unit,
+    showTypeToggle: Boolean,
+    onApplyFilter: (genre: String, year: String, sort: String, country: String, channelId: Int) -> Unit,
     onClearFilter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyRow(
+    var showRefinePanel by remember { mutableStateOf(false) }
+
+    val refineCount = remember(
+        tabState.activeSort,
+        tabState.activeYear,
+        tabState.activeCountry,
+        tabState.activeChannelId,
+        showTypeToggle,
+    ) {
+        (if (tabState.activeSort != "ForYou") 1 else 0) +
+            (if (tabState.activeYear != "All") 1 else 0) +
+            (if (tabState.activeCountry != "All") 1 else 0) +
+            (if (showTypeToggle && tabState.activeChannelId == 2) 1 else 0)
+    }
+
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .background(CanvasBlack),
-        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        item(key = "flt_all") {
-            CatalogFilterChip(
-                label = "All",
-                selected = !tabState.isFilterActive,
-                onClick = onClearFilter,
-            )
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            item(key = "flt_all") {
+                CatalogFilterChip(
+                    label = "All",
+                    selected = !tabState.isFilterActive,
+                    onClick = {
+                        showRefinePanel = false
+                        onClearFilter()
+                    },
+                )
+            }
+
+            item(key = "flt_refine_btn") {
+                val label = if (refineCount > 0) "Refine · $refineCount" else "Refine"
+                Surface(
+                    onClick = { showRefinePanel = !showRefinePanel },
+                    shape = ClickableSurfaceDefaults.shape(FilterChipShape),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = if (showRefinePanel || refineCount > 0) SurfaceSelected else SurfaceElevated,
+                        contentColor = if (showRefinePanel || refineCount > 0) InkOnSelected else InkPrimary,
+                        focusedContainerColor = PureWhite,
+                        focusedContentColor = InkOnWhite,
+                    ),
+                    border = ClickableSurfaceDefaults.border(border = Border.None, focusedBorder = Border.None),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Text(label, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+
+            itemsIndexed(genreOptions, key = { idx, opt -> "gen_${idx}_${opt.genre}" }) { _, option ->
+                val selected = tabState.activeGenre.equals(option.genre, ignoreCase = true)
+                CatalogFilterChip(
+                    label = option.label,
+                    selected = selected,
+                    onClick = {
+                        val nextGenre = if (selected) "All" else option.genre
+                        onApplyFilter(
+                            nextGenre,
+                            tabState.activeYear,
+                            tabState.activeSort,
+                            tabState.activeCountry,
+                            tabState.activeChannelId,
+                        )
+                    },
+                )
+            }
         }
 
-        itemsIndexed(QUICK_SORT_FILTERS, key = { idx, it -> "sort_${idx}_${it.first}" }) { _, (sortKey, label) ->
-            val selected = tabState.activeSort == sortKey
-            CatalogFilterChip(
-                label = label,
-                selected = selected,
-                onClick = {
-                    val nextSort = if (selected) "ForYou" else sortKey
-                    onApplyFilter(tabState.activeGenre, tabState.activeYear, nextSort, tabState.activeCountry)
-                },
-            )
-        }
+        AnimatedVisibility(visible = showRefinePanel) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 32.dp, end = 32.dp, bottom = 10.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SurfaceTonal)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                if (showTypeToggle) {
+                    RefineRow(label = "TYPE") {
+                        listOf(1 to "Films", 2 to "Series").forEach { (chId, label) ->
+                            val selected = tabState.activeChannelId == chId && tabState.isFilterActive
+                            CatalogFilterChip(
+                                label = label,
+                                selected = selected,
+                                compact = true,
+                                onClick = {
+                                    val nextSort = if (!tabState.isFilterActive) "Hottest" else tabState.activeSort
+                                    onApplyFilter(
+                                        tabState.activeGenre,
+                                        tabState.activeYear,
+                                        nextSort,
+                                        tabState.activeCountry,
+                                        chId,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
 
-        itemsIndexed(QUICK_YEAR_FILTERS, key = { idx, yr -> "yr_${idx}_$yr" }) { _, yr ->
-            val selected = tabState.activeYear == yr
-            CatalogFilterChip(
-                label = yr,
-                selected = selected,
-                onClick = {
-                    val nextYear = if (selected) "All" else yr
-                    onApplyFilter(tabState.activeGenre, nextYear, tabState.activeSort, tabState.activeCountry)
-                },
-            )
-        }
+                RefineRow(label = "SORT") {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itemsIndexed(SORT_FILTERS, key = { idx, it -> "rf_s_${idx}_${it.first}" }) { _, (key, label) ->
+                            CatalogFilterChip(
+                                label = label,
+                                selected = tabState.activeSort.equals(key, ignoreCase = true),
+                                compact = true,
+                                onClick = {
+                                    onApplyFilter(
+                                        tabState.activeGenre,
+                                        tabState.activeYear,
+                                        key,
+                                        tabState.activeCountry,
+                                        tabState.activeChannelId,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
 
-        itemsIndexed(genreOptions, key = { idx, opt -> "gen_${idx}_${opt.genre}" }) { _, option ->
-            val selected = tabState.activeGenre.equals(option.genre, ignoreCase = true)
-            CatalogFilterChip(
-                label = option.label,
-                selected = selected,
-                onClick = {
-                    val nextGenre = if (selected) "All" else option.genre
-                    onApplyFilter(nextGenre, tabState.activeYear, tabState.activeSort, option.country)
-                },
-            )
+                RefineRow(label = "YEAR") {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itemsIndexed(YEAR_FILTERS, key = { idx, yr -> "rf_y_${idx}_$yr" }) { _, yr ->
+                            CatalogFilterChip(
+                                label = if (yr == "All") "All Years" else yr,
+                                selected = tabState.activeYear == yr,
+                                compact = true,
+                                onClick = {
+                                    val nextYear = if (tabState.activeYear == yr && yr != "All") "All" else yr
+                                    onApplyFilter(
+                                        tabState.activeGenre,
+                                        nextYear,
+                                        tabState.activeSort,
+                                        tabState.activeCountry,
+                                        tabState.activeChannelId,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+
+                RefineRow(label = "REGION") {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itemsIndexed(REGION_FILTERS, key = { idx, it -> "rf_c_${idx}_${it.first}" }) { _, (apiVal, label) ->
+                            CatalogFilterChip(
+                                label = label,
+                                selected = tabState.activeCountry.equals(apiVal, ignoreCase = true),
+                                compact = true,
+                                onClick = {
+                                    val nextCountry = if (tabState.activeCountry.equals(apiVal, ignoreCase = true) && apiVal != "All") {
+                                        "All"
+                                    } else {
+                                        apiVal
+                                    }
+                                    onApplyFilter(
+                                        tabState.activeGenre,
+                                        tabState.activeYear,
+                                        tabState.activeSort,
+                                        nextCountry,
+                                        tabState.activeChannelId,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun RefineRow(
+    label: String,
+    content: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = InkMuted,
+            modifier = Modifier.width(56.dp),
+        )
+        content()
     }
 }
 
@@ -376,13 +556,14 @@ private val FilterChipShape = RoundedCornerShape(50)
 private fun CatalogFilterChip(
     label: String,
     selected: Boolean,
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(FilterChipShape),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) SurfaceSelected else SurfaceTonal,
+            containerColor = if (selected) SurfaceSelected else if (compact) SurfaceElevated else SurfaceTonal,
             contentColor = if (selected) InkOnSelected else InkSecondary,
             focusedContainerColor = PureWhite,
             focusedContentColor = InkOnWhite,
@@ -392,8 +573,11 @@ private fun CatalogFilterChip(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 15.dp, vertical = 7.dp),
+            style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(
+                horizontal = if (compact) 12.dp else 15.dp,
+                vertical = if (compact) 6.dp else 7.dp,
+            ),
         )
     }
 }
@@ -401,18 +585,40 @@ private fun CatalogFilterChip(
 @Composable
 private fun FilteredCatalogGrid(
     tabState: CatalogTabState,
+    showTypeToggle: Boolean,
     onItemClick: (MediaItem) -> Unit,
     onItemFocused: (MediaItem) -> Unit,
     onLoadMore: () -> Unit,
     onClearFilter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val activeSummary = remember(tabState.activeGenre, tabState.activeYear, tabState.activeSort) {
+    val activeSummary = remember(
+        tabState.activeChannelId,
+        tabState.activeGenre,
+        tabState.activeYear,
+        tabState.activeCountry,
+        tabState.activeSort,
+        showTypeToggle,
+    ) {
         buildList {
+            if (showTypeToggle) {
+                add(if (tabState.activeChannelId == 2) "SERIES" else "FILMS")
+            }
             if (tabState.activeGenre != "All") add(tabState.activeGenre.uppercase())
             if (tabState.activeYear != "All") add(tabState.activeYear)
+            if (tabState.activeCountry != "All") {
+                val friendly = REGION_FILTERS.firstOrNull { it.first.equals(tabState.activeCountry, ignoreCase = true) }?.second
+                    ?: tabState.activeCountry
+                add(friendly.uppercase())
+            }
             if (tabState.activeSort != "ForYou") {
-                add(if (tabState.activeSort == "Hottest") "TRENDING" else tabState.activeSort.uppercase())
+                add(
+                    when (tabState.activeSort) {
+                        "Hottest" -> "POPULAR"
+                        "TopRated" -> "TOP RATED"
+                        else -> tabState.activeSort.uppercase()
+                    },
+                )
             }
         }.joinToString("  ·  ")
     }

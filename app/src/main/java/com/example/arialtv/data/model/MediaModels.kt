@@ -177,6 +177,7 @@ data class AppSettings(
     val controlsTimeoutSeconds: Int = 4,
     val networkTimeoutSeconds: Int = 25,
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    val adultFilterEnabled: Boolean = true,
 )
 
 @Immutable
@@ -198,6 +199,7 @@ data class MediaItem(
         get() {
             val g = genre.lowercase()
             return when {
+                subjectType == 7 -> "SHORT"
                 subjectType == 6 || g.contains("music") -> "MUSIC"
                 g.contains("documentary") -> "DOC"
                 subjectType == 2 -> "SERIES"
@@ -218,9 +220,23 @@ data class CatalogFilterOption(
 )
 
 @Immutable
+data class CategoryQuery(
+    val title: String,
+    val subtitle: String = "",
+    val channelId: Int = 1, // 1 = Movies, 2 = TV Series
+    val genre: String = "All",
+    val year: String = "All",
+    val country: String = "All",
+    val sort: String = "Hottest",
+    val minRating: Double = 0.0,
+    val seedItems: List<MediaItem> = emptyList(),
+)
+
+@Immutable
 data class CatalogRow(
     val category: String,
     val items: List<MediaItem>,
+    val expandQuery: CategoryQuery? = null,
 )
 
 @Immutable
@@ -371,7 +387,7 @@ data class ConnectionTestResult(
 
 object AppMetadata {
     const val APP_NAME = "Arial TV"
-    const val VERSION_NAME = "1.5.0"
+    const val VERSION_NAME = "1.6.0"
     const val DEVELOPER_NAME = "Auris Daniel"
     const val GITHUB_HANDLE = "github.com/daniel-17gr"
     const val GITHUB_REPO_URL = "https://github.com/daniel-17gr/ArialTv"

@@ -42,6 +42,7 @@ class AppPreferences(context: Context) {
             background = SubtitleBackground.fromId(prefs.getString(KEY_SUB_BG, null)),
             position = SubtitlePosition.fromId(prefs.getString(KEY_SUB_POS, null)),
         ),
+        adultFilterEnabled = prefs.getBoolean(KEY_ADULT_FILTER, true),
     )
 
     fun saveSettings(settings: AppSettings) {
@@ -61,6 +62,7 @@ class AppPreferences(context: Context) {
             .putString(KEY_SUB_COLOR, settings.subtitleStyle.color.id)
             .putString(KEY_SUB_BG, settings.subtitleStyle.background.id)
             .putString(KEY_SUB_POS, settings.subtitleStyle.position.id)
+            .putBoolean(KEY_ADULT_FILTER, settings.adultFilterEnabled)
             .apply()
     }
 
@@ -291,6 +293,7 @@ class AppPreferences(context: Context) {
         private const val KEY_SUB_COLOR = "sub_color"
         private const val KEY_SUB_BG = "sub_bg"
         private const val KEY_SUB_POS = "sub_pos"
+        private const val KEY_ADULT_FILTER = "adult_filter_enabled"
         private const val KEY_HISTORY = "watch_history_v1"
         private const val KEY_EPISODE_PROGRESS = "episode_progress_v1"
         private const val KEY_SEARCH_HISTORY = "search_history_v1"

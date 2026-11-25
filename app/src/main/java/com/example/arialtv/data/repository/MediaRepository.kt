@@ -3,6 +3,7 @@ package com.example.arialtv.data.repository
 import com.example.arialtv.data.model.AppSettings
 import com.example.arialtv.data.model.CatalogFilterOption
 import com.example.arialtv.data.model.CatalogRow
+import com.example.arialtv.data.model.CategoryQuery
 import com.example.arialtv.data.model.ConnectionMode
 import com.example.arialtv.data.model.ConnectionTestResult
 import com.example.arialtv.data.model.DubOption
@@ -19,6 +20,7 @@ import com.example.arialtv.data.model.TrendingSearchRank
 import com.example.arialtv.data.moviebox.MovieBoxApiException
 import com.example.arialtv.data.moviebox.MovieBoxBridgeClient
 import com.example.arialtv.data.moviebox.MovieBoxV3Client
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.util.concurrent.ConcurrentHashMap
@@ -57,9 +59,48 @@ class MediaRepository(
         v3Client.setTimeoutSeconds(settings.networkTimeoutSeconds)
     }
 
-    private fun List<MediaItem>.cleanPlayable(): List<MediaItem> =
-        filter { it.id.isNotBlank() && it.title.isNotBlank() && it.posterUrl.isNotBlank() && it.hasResource }
+    private suspend inline fun <T> safeCall(crossinline block: suspend () -> T): T? {
+        return try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun List<MediaItem>.cleanPlayable(filterAdult: Boolean): List<MediaItem> =
+        ContentFilter.filterSafeList(this, filterAdult)
+            .filter {
+                it.id.isNotBlank() &&
+                    it.title.isNotBlank() &&
+                    it.posterUrl.isNotBlank() &&
+                    it.hasResource &&
+                    (it.subjectType == 1 || it.subjectType == 2)
+            }
             .distinctBy { it.id }
+
+    private fun List<MediaItem>.cleanHomeQuality(
+        filterAdult: Boolean,
+        minRating: Double = 5.5,
+    ): List<MediaItem> =
+        filter { ContentFilter.isQualityHomeItem(it, filterAdult, minRating = minRating) }
+            .distinctBy { it.id }
+
+    private fun findRowsByKeywords(
+        rows: List<CatalogRow>,
+        vararg keywords: String,
+    ): List<MediaItem> {
+        return rows
+            .filter { row ->
+                val cleaned = ContentFilter.cleanCategoryTitle(row.category).lowercase()
+                keywords.any { kw -> cleaned.contains(kw.lowercase()) }
+            }
+            .flatMap { it.items }
+    }
+
+    private fun sortByImdbDesc(items: List<MediaItem>): List<MediaItem> =
+        items.sortedByDescending { it.rating.toDoubleOrNull() ?: 0.0 }
 
     suspend fun fetchHome(
         settings: AppSettings,
@@ -67,132 +108,235 @@ class MediaRepository(
         forceRefresh: Boolean = false,
     ): HomeCatalog {
         syncClientConfig(settings)
-        val cacheKey = "home_${settings.connectionMode.id}_${settings.language.code}_$tabId"
+        val filterAdult = settings.adultFilterEnabled
+        val cacheKey = "home_${settings.connectionMode.id}_${settings.language.code}_${tabId}_af$filterAdult"
         if (!forceRefresh) {
             getFresh(catalogCache, cacheKey)?.let { return it }
         }
 
         val result = when (settings.connectionMode) {
             ConnectionMode.STANDALONE_V3 -> coroutineScope {
-                val primaryDef = async { runCatching { v3Client.fetchHomepage(tabId = tabId) }.getOrNull() }
-                val moviesTabDef = async {
-                    if (tabId == 0) runCatching { v3Client.fetchHomepage(tabId = 2) }.getOrNull() else null
+                val moviesTabDef = async { safeCall { v3Client.fetchHomepage(tabId = 2) } }
+                val seriesTabDef = async { safeCall { v3Client.fetchHomepage(tabId = 5) } }
+                val rankDef = async { safeCall { v3Client.fetchSearchRank() } }
+                val sciFiDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
-                val rankDef = async { runCatching { v3Client.fetchSearchRank() }.getOrNull() }
-                val topRatedDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 1, sort = "Hottest", page = 1, perPage = 20).items
-                    }.getOrDefault(emptyList())
+                val thrillerDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Thriller", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
-                val latestMoviesDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 1, sort = "Latest", page = 1, perPage = 20).items
-                    }.getOrDefault(emptyList())
+                val actionDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Action", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
-                val actionSciFiDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Action", sort = "Hottest", page = 1, perPage = 18).items
-                    }.getOrDefault(emptyList())
+                val animDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Animation", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val comedyDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Comedy", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
 
-                val primary = primaryDef.await()
                 val moviesTab = moviesTabDef.await()
+                val seriesTab = seriesTabDef.await()
                 val rank = rankDef.await()
-                val hottest = topRatedDef.await().cleanPlayable()
-                val latest = latestMoviesDef.await().cleanPlayable()
-                val actionHits = actionSciFiDef.await().cleanPlayable()
+                val sciFiList = sciFiDef.await()
+                val thrillerList = thrillerDef.await()
+                val actionList = actionDef.await()
+                val animList = animDef.await()
+                val comedyList = comedyDef.await()
 
-                if (primary == null && moviesTab == null && hottest.isEmpty() && rank == null) {
+                if (moviesTab == null && seriesTab == null && rank == null &&
+                    sciFiList.isEmpty() && actionList.isEmpty()
+                ) {
                     // Surface real error if offline
-                    return@coroutineScope v3Client.fetchHomepage(tabId = tabId)
+                    return@coroutineScope v3Client.fetchHomepage(tabId = 2)
                 }
 
-                val seenIdsAcrossCurated = HashSet<String>()
-                fun deduplicateRow(items: List<MediaItem>, preferUnique: Boolean = true): List<MediaItem> {
-                    val clean = items.cleanPlayable()
-                    if (!preferUnique) return clean
-                    val fresh = clean.filter { it.id !in seenIdsAcrossCurated }
-                    val chosen = if (fresh.size >= 6) fresh else clean
-                    chosen.take(10).forEach { seenIdsAcrossCurated.add(it.id) }
+                val movieRows = moviesTab?.rows.orEmpty()
+                val seriesRows = seriesTab?.rows.orEmpty()
+
+                val seenAcrossHome = HashSet<String>()
+                fun pickFresh(pool: List<MediaItem>, minRating: Double): List<MediaItem> {
+                    val quality = pool.cleanHomeQuality(filterAdult, minRating = minRating)
+                        .ifEmpty { pool.cleanHomeQuality(filterAdult, minRating = 4.5) }
+                    val fresh = quality.filter { it.id !in seenAcrossHome }
+                    val chosen = if (fresh.size >= 6) fresh else quality
+                    chosen.take(10).forEach { seenAcrossHome.add(it.id) }
                     return chosen
                 }
 
-                val curatedRows = buildList {
-                    // 1. Live Trending Movies (always high signal!)
-                    val trendMovies = rank?.movies.orEmpty().cleanPlayable()
-                    if (trendMovies.isNotEmpty()) {
-                        add(CatalogRow("Trending Movies", deduplicateRow(trendMovies)))
-                    }
+                fun curatedRow(
+                    title: String,
+                    subtitle: String,
+                    pool: List<MediaItem>,
+                    channelId: Int,
+                    genre: String = "All",
+                    country: String = "All",
+                    sort: String = "Hottest",
+                    minRating: Double = 5.5,
+                    sortDescByImdb: Boolean = false,
+                ): CatalogRow? {
+                    val base = pickFresh(pool, minRating = minRating)
+                    val ordered = if (sortDescByImdb) sortByImdbDesc(base) else base
+                    if (ordered.size < 3) return null
+                    return CatalogRow(
+                        category = title,
+                        items = ordered,
+                        expandQuery = CategoryQuery(
+                            title = title,
+                            subtitle = subtitle,
+                            channelId = channelId,
+                            genre = genre,
+                            country = country,
+                            sort = sort,
+                            minRating = minRating,
+                            seedItems = ordered.take(12),
+                        ),
+                    )
+                }
 
-                    // 2. Top Rated Cinema (sorted by IMDb score descending)
-                    val topRated = hottest
-                        .sortedByDescending { it.rating.toDoubleOrNull() ?: 0.0 }
-                    if (topRated.isNotEmpty()) {
-                        add(CatalogRow("Top Rated Cinema", deduplicateRow(topRated)))
-                    }
+                val boxOffice2026 = findRowsByKeywords(movieRows, "worldwide box office", "trending movie")
+                val imdbTop = findRowsByKeywords(movieRows, "imdb top", "all time box office")
+                val superheroAction = findRowsByKeywords(movieRows, "marvel", "dc movies", "action")
+                val sciFiWorld = findRowsByKeywords(movieRows, "end of the world", "disaster")
+                val animEditorial = findRowsByKeywords(movieRows, "animation", "live-action", "epic fantasy")
+                val comedyEditorial = findRowsByKeywords(movieRows, "comed")
 
-                    // 3. Trending TV Series
-                    val trendSeries = rank?.series.orEmpty().cleanPlayable()
-                    if (trendSeries.isNotEmpty()) {
-                        add(CatalogRow("Trending Series", deduplicateRow(trendSeries)))
-                    }
+                val allTimeSeries = findRowsByKeywords(seriesRows, "all time favorites", "trending tv", "hot returnings")
+                val crimeThrillerSeries = findRowsByKeywords(seriesRows, "deadly hunt")
+                val kDramaSeries = findRowsByKeywords(seriesRows, "k-drama")
 
-                    // 4. Primary MovieBox curated rows (skipping empty / live sports noise)
-                    val rawApiRows = buildList {
-                        primary?.rows?.let { addAll(it) }
-                        moviesTab?.rows?.let { addAll(it) }
-                    }
-                    rawApiRows
-                        .filter { row ->
-                            val low = row.category.lowercase()
-                            !low.contains("football") && !low.contains("live match") && !low.contains("sport live")
-                        }
-                        .distinctBy { it.category.lowercase() }
-                        .forEach { row ->
-                            val cleanItems = deduplicateRow(row.items, preferUnique = false)
-                            if (cleanItems.size >= 3) {
-                                add(CatalogRow(row.category, cleanItems))
-                            }
-                        }
+                val curatedRows = listOfNotNull(
+                    curatedRow(
+                        title = "Trending Worldwide",
+                        subtitle = "Most watched films globally",
+                        pool = boxOffice2026 + rank?.movies.orEmpty(),
+                        channelId = 1,
+                        sort = "Hottest",
+                        minRating = 5.5,
+                    ),
+                    curatedRow(
+                        title = "IMDb Top Cinema",
+                        subtitle = "Critically acclaimed masterpieces",
+                        pool = imdbTop,
+                        channelId = 1,
+                        sort = "TopRated",
+                        minRating = 7.0,
+                        sortDescByImdb = true,
+                    ),
+                    curatedRow(
+                        title = "Top TV Series",
+                        subtitle = "Highest-rated bingeable series",
+                        pool = allTimeSeries + rank?.series.orEmpty(),
+                        channelId = 2,
+                        sort = "Hottest",
+                        minRating = 6.0,
+                    ),
+                    curatedRow(
+                        title = "Action & Blockbusters",
+                        subtitle = "High-octane action & superheroes",
+                        pool = superheroAction + actionList,
+                        channelId = 1,
+                        genre = "Action",
+                        sort = "Hottest",
+                        minRating = 5.8,
+                    ),
+                    curatedRow(
+                        title = "Sci-Fi & Cyberpunk",
+                        subtitle = "Futuristic & dystopian worlds",
+                        pool = sciFiWorld + sciFiList,
+                        channelId = 1,
+                        genre = "Sci-Fi",
+                        sort = "Hottest",
+                        minRating = 5.8,
+                    ),
+                    curatedRow(
+                        title = "Crime & Mystery Thrillers",
+                        subtitle = "Suspense, heists & dark mysteries",
+                        pool = thrillerList + crimeThrillerSeries,
+                        channelId = 1,
+                        genre = "Thriller",
+                        sort = "Hottest",
+                        minRating = 6.0,
+                    ),
+                    curatedRow(
+                        title = "Animation & Family",
+                        subtitle = "Animated hits for everyone",
+                        pool = animList + animEditorial,
+                        channelId = 1,
+                        genre = "Animation",
+                        sort = "Hottest",
+                        minRating = 6.0,
+                    ),
+                    curatedRow(
+                        title = "K-Drama & World Hits",
+                        subtitle = "Acclaimed Korean & international series",
+                        pool = kDramaSeries,
+                        channelId = 2,
+                        country = "Korea",
+                        sort = "Hottest",
+                        minRating = 6.2,
+                    ),
+                    curatedRow(
+                        title = "Comedy Picks",
+                        subtitle = "Smart comedies & crowd-pleasers",
+                        pool = comedyEditorial + comedyList,
+                        channelId = 1,
+                        genre = "Comedy",
+                        sort = "Hottest",
+                        minRating = 5.8,
+                    ),
+                ).distinctBy { it.category.lowercase() }
 
-                    // 5. New Releases
-                    if (latest.isNotEmpty()) {
-                        add(CatalogRow("New Releases", deduplicateRow(latest)))
-                    }
-
-                    // 6. Action & Blockbusters
-                    if (actionHits.isNotEmpty()) {
-                        add(CatalogRow("Action Blockbusters", deduplicateRow(actionHits)))
-                    }
-                }.distinctBy { it.category.lowercase() }
-
-                // Curate Hero Spotlight: prioritize high-rated titles with real widescreen backdrops
+                // High-signal Hero Spotlight with real widescreen backdrops and strong ratings
                 val featuredPool = buildList {
-                    primary?.featured?.let { addAll(it) }
-                    moviesTab?.featured?.let { addAll(it) }
+                    addAll(boxOffice2026)
+                    addAll(imdbTop.take(4))
                     addAll(rank?.movies.orEmpty().take(5))
-                    addAll(hottest.take(5))
-                }.cleanPlayable()
+                    moviesTab?.featured?.let { addAll(it) }
+                    seriesTab?.featured?.let { addAll(it) }
+                }.cleanHomeQuality(filterAdult, minRating = 6.5)
                     .sortedWith(
-                        compareByDescending<MediaItem> { if (it.backdropUrl.isNotBlank() && it.backdropUrl != it.posterUrl) 1 else 0 }
-                            .thenByDescending { it.rating.toDoubleOrNull() ?: 0.0 },
+                        compareByDescending<MediaItem> {
+                            if (it.backdropUrl.isNotBlank() && it.backdropUrl != it.posterUrl) 1 else 0
+                        }.thenByDescending { it.rating.toDoubleOrNull() ?: 0.0 },
                     )
                     .take(8)
-
-                val mergedFilters = buildList {
-                    primary?.filters?.let { addAll(it) }
-                    moviesTab?.filters?.let { addAll(it) }
-                }.distinctBy { it.label.lowercase() }
+                    .ifEmpty {
+                        curatedRows.firstOrNull()?.items?.take(5).orEmpty()
+                    }
 
                 HomeCatalog(
-                    featured = featuredPool.ifEmpty { curatedRows.firstOrNull()?.items?.take(5).orEmpty() },
+                    featured = featuredPool,
                     rows = curatedRows,
-                    filters = mergedFilters,
-                    sourceHost = primary?.sourceHost?.ifBlank { moviesTab?.sourceHost.orEmpty() }
-                        ?: moviesTab?.sourceHost.orEmpty(),
+                    filters = DEFAULT_MOVIE_FILTERS,
+                    sourceHost = moviesTab?.sourceHost?.ifBlank { v3Client.activeBaseUrl }
+                        ?: v3Client.activeBaseUrl,
                 )
             }
-            ConnectionMode.CUSTOM_BRIDGE -> bridgeClient.fetchHome(settings.bridgeBaseUrl)
+
+            ConnectionMode.CUSTOM_BRIDGE -> {
+                val raw = bridgeClient.fetchHome(settings.bridgeBaseUrl)
+                raw.copy(
+                    featured = raw.featured.cleanPlayable(filterAdult),
+                    rows = raw.rows.mapNotNull { row ->
+                        val items = row.items.cleanPlayable(filterAdult)
+                        if (items.isEmpty()) null else row.copy(
+                            category = ContentFilter.cleanCategoryTitle(row.category),
+                            items = items,
+                        )
+                    },
+                )
+            }
         }
 
         if (result.rows.isNotEmpty()) {
@@ -206,56 +350,184 @@ class MediaRepository(
         forceRefresh: Boolean = false,
     ): HomeCatalog {
         syncClientConfig(settings)
-        val cacheKey = "movies_${settings.connectionMode.id}_${settings.language.code}"
+        val filterAdult = settings.adultFilterEnabled
+        val cacheKey = "movies_${settings.connectionMode.id}_${settings.language.code}_af$filterAdult"
         if (!forceRefresh) {
             getFresh(catalogCache, cacheKey)?.let { return it }
         }
 
         val result = when (settings.connectionMode) {
             ConnectionMode.STANDALONE_V3 -> coroutineScope {
-                val tabDef = async { runCatching { v3Client.fetchHomepage(tabId = 2) }.getOrNull() }
-                val rankDef = async { runCatching { v3Client.fetchSearchRank().movies }.getOrDefault(emptyList()) }
-                val sciFiDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 16).items
-                    }.getOrDefault(emptyList())
+                val tabDef = async { safeCall { v3Client.fetchHomepage(tabId = 2) } }
+                val rankDef = async { safeCall { v3Client.fetchSearchRank().movies }.orEmpty() }
+                val actionDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Action", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
-                val thrillerDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 1, genre = "Thriller", sort = "Hottest", page = 1, perPage = 16).items
-                    }.getOrDefault(emptyList())
+                val sciFiDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val crimeDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Crime", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val horrorDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Horror", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val comedyDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Comedy", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val animDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "Animation", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val historyDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 1, genre = "History", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
 
                 val movieTab = tabDef.await()
-                val trending = rankDef.await().cleanPlayable()
-                val sciFi = sciFiDef.await().cleanPlayable()
-                val thriller = thrillerDef.await().cleanPlayable()
+                val trendingRank = rankDef.await()
+                val action = actionDef.await()
+                val sciFi = sciFiDef.await()
+                val crime = crimeDef.await()
+                val horror = horrorDef.await()
+                val comedy = comedyDef.await()
+                val anim = animDef.await()
+                val history = historyDef.await()
 
-                val rows = buildList {
-                    if (trending.isNotEmpty()) add(CatalogRow("Trending Films", trending))
-                    movieTab?.rows?.forEach { row ->
-                        val items = row.items.cleanPlayable()
-                        if (items.size >= 3) add(CatalogRow(row.category, items))
-                    }
-                    if (sciFi.isNotEmpty()) add(CatalogRow("Sci-Fi & Adventure", sciFi))
-                    if (thriller.isNotEmpty()) add(CatalogRow("Thrillers & Mystery", thriller))
-                }.distinctBy { it.category.lowercase() }
+                val tabRows = movieTab?.rows.orEmpty()
+                val boxOffice = findRowsByKeywords(tabRows, "worldwide box office", "trending movie")
+                val imdbTop = findRowsByKeywords(tabRows, "imdb top", "all time box office")
+                val superhero = findRowsByKeywords(tabRows, "marvel", "dc movies")
+                val endWorld = findRowsByKeywords(tabRows, "end of the world")
+
+                fun movieRow(
+                    title: String,
+                    subtitle: String,
+                    pool: List<MediaItem>,
+                    genre: String = "All",
+                    sort: String = "Hottest",
+                    minRating: Double = 4.8,
+                    sortDescByImdb: Boolean = false,
+                ): CatalogRow? {
+                    val cleaned = pool.cleanHomeQuality(filterAdult, minRating = minRating)
+                        .ifEmpty { pool.cleanPlayable(filterAdult) }
+                    val ordered = if (sortDescByImdb) sortByImdbDesc(cleaned) else cleaned
+                    if (ordered.size < 3) return null
+                    return CatalogRow(
+                        category = title,
+                        items = ordered,
+                        expandQuery = CategoryQuery(
+                            title = title,
+                            subtitle = subtitle,
+                            channelId = 1,
+                            genre = genre,
+                            sort = sort,
+                            minRating = minRating,
+                            seedItems = ordered.take(12),
+                        ),
+                    )
+                }
+
+                val rows = listOfNotNull(
+                    movieRow(
+                        title = "Box Office & Trending",
+                        subtitle = "Top films in theaters & streaming",
+                        pool = boxOffice + trendingRank,
+                        sort = "Hottest",
+                        minRating = 5.2,
+                    ),
+                    movieRow(
+                        title = "IMDb Top 250 Classics",
+                        subtitle = "All-time highest-rated films",
+                        pool = imdbTop,
+                        sort = "TopRated",
+                        minRating = 7.0,
+                        sortDescByImdb = true,
+                    ),
+                    movieRow(
+                        title = "Action & Superheroes",
+                        subtitle = "Blockbusters, stunts & comic worlds",
+                        pool = superhero + action,
+                        genre = "Action",
+                        minRating = 5.0,
+                    ),
+                    movieRow(
+                        title = "Sci-Fi & Dystopian",
+                        subtitle = "Space, AI & post-apocalyptic hits",
+                        pool = endWorld + sciFi,
+                        genre = "Sci-Fi",
+                        minRating = 5.0,
+                    ),
+                    movieRow(
+                        title = "Crime & Thrillers",
+                        subtitle = "Detectives, heists & psychological tension",
+                        pool = crime,
+                        genre = "Crime",
+                        minRating = 5.0,
+                    ),
+                    movieRow(
+                        title = "Horror & Supernatural",
+                        subtitle = "Chills, hauntings & survival horror",
+                        pool = horror,
+                        genre = "Horror",
+                        minRating = 4.5,
+                    ),
+                    movieRow(
+                        title = "Comedy",
+                        subtitle = "Standout comedies & feel-good picks",
+                        pool = comedy,
+                        genre = "Comedy",
+                        minRating = 4.8,
+                    ),
+                    movieRow(
+                        title = "Animation & Adventure",
+                        subtitle = "Animated features for all ages",
+                        pool = anim,
+                        genre = "Animation",
+                        minRating = 5.2,
+                    ),
+                    movieRow(
+                        title = "History & War",
+                        subtitle = "Epic true stories & historical cinema",
+                        pool = history,
+                        genre = "History",
+                        minRating = 5.2,
+                    ),
+                ).distinctBy { it.category.lowercase() }
 
                 if (rows.isNotEmpty()) {
+                    val featured = (boxOffice + movieTab?.featured.orEmpty() + trendingRank)
+                        .cleanHomeQuality(filterAdult, minRating = 6.0)
+                        .ifEmpty { rows.first().items.take(6) }
+                        .take(8)
                     HomeCatalog(
-                        featured = movieTab?.featured?.cleanPlayable()?.ifEmpty { trending.take(6) } ?: trending.take(6),
+                        featured = featured,
                         rows = rows,
-                        filters = movieTab?.filters.orEmpty(),
-                        sourceHost = movieTab?.sourceHost.orEmpty(),
+                        filters = DEFAULT_MOVIE_FILTERS,
+                        sourceHost = movieTab?.sourceHost?.ifBlank { v3Client.activeBaseUrl }
+                            ?: v3Client.activeBaseUrl,
                     )
                 } else {
                     val home = fetchHome(settings, tabId = 0, forceRefresh = forceRefresh)
-                    filterCatalogByType(home, isSeries = false)
+                    filterCatalogByType(home, isSeries = false, filterAdult = filterAdult)
                 }
             }
+
             ConnectionMode.CUSTOM_BRIDGE -> {
                 val home = bridgeClient.fetchHome(settings.bridgeBaseUrl)
-                filterCatalogByType(home, isSeries = false)
+                filterCatalogByType(home, isSeries = false, filterAdult = filterAdult)
             }
         }
 
@@ -270,74 +542,174 @@ class MediaRepository(
         forceRefresh: Boolean = false,
     ): HomeCatalog {
         syncClientConfig(settings)
-        val cacheKey = "series_${settings.connectionMode.id}_${settings.language.code}"
+        val filterAdult = settings.adultFilterEnabled
+        val cacheKey = "series_${settings.connectionMode.id}_${settings.language.code}_af$filterAdult"
         if (!forceRefresh) {
             getFresh(catalogCache, cacheKey)?.let { return it }
         }
 
         val result = when (settings.connectionMode) {
             ConnectionMode.STANDALONE_V3 -> coroutineScope {
-                val rankDef = async { runCatching { v3Client.fetchSearchRank().series }.getOrDefault(emptyList()) }
-                val hottestDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 2, sort = "Hottest", page = 1, perPage = 20).items
-                    }.getOrDefault(emptyList())
-                }
+                val tabDef = async { safeCall { v3Client.fetchHomepage(tabId = 5) } }
+                val rankDef = async { safeCall { v3Client.fetchSearchRank().series }.orEmpty() }
                 val latestDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 2, sort = "Latest", page = 1, perPage = 20).items
-                    }.getOrDefault(emptyList())
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 2, sort = "Latest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val crimeDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Crime", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val koreaDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 2, country = "Korea", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val sciFiDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Sci-Fi", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
                 val dramaDef = async {
-                    runCatching {
+                    safeCall {
                         v3Client.fetchFilteredList(channelId = 2, genre = "Drama", sort = "Hottest", page = 1, perPage = 16).items
-                    }.getOrDefault(emptyList())
+                    }.orEmpty()
                 }
                 val animeDef = async {
-                    runCatching {
-                        v3Client.fetchFilteredList(channelId = 2, genre = "Animation", sort = "Hottest", page = 1, perPage = 16).items
-                    }.getOrDefault(emptyList())
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Anime", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
+                }
+                val comedyDef = async {
+                    safeCall {
+                        v3Client.fetchFilteredList(channelId = 2, genre = "Comedy", sort = "Hottest", page = 1, perPage = 16).items
+                    }.orEmpty()
                 }
 
-                val rankSeries = rankDef.await().cleanPlayable()
-                val hottestSeries = hottestDef.await().cleanPlayable()
-                val latestSeries = latestDef.await().cleanPlayable()
-                val dramaSeries = dramaDef.await().cleanPlayable()
-                val animeSeries = animeDef.await().cleanPlayable()
+                val seriesTab = tabDef.await()
+                val rankSeries = rankDef.await()
+                val latest = latestDef.await()
+                val crime = crimeDef.await()
+                val korea = koreaDef.await()
+                val sciFi = sciFiDef.await()
+                val drama = dramaDef.await()
+                val anime = animeDef.await()
+                val comedy = comedyDef.await()
 
-                val rows = buildList {
-                    if (rankSeries.isNotEmpty()) add(CatalogRow("Trending Series", rankSeries))
-                    if (hottestSeries.isNotEmpty()) add(CatalogRow("Most Popular Series", hottestSeries))
-                    if (latestSeries.isNotEmpty()) add(CatalogRow("New Releases", latestSeries))
-                    if (dramaSeries.isNotEmpty()) add(CatalogRow("Acclaimed Dramas", dramaSeries))
-                    if (animeSeries.isNotEmpty()) add(CatalogRow("Animation & Anime", animeSeries))
-                }.distinctBy { it.category.lowercase() }
+                val tabRows = seriesTab?.rows.orEmpty()
+                val allTime = findRowsByKeywords(tabRows, "all time favorites", "trending tv")
+                val hotReturning = findRowsByKeywords(tabRows, "hot returnings", "new releases")
+                val deadlyHunt = findRowsByKeywords(tabRows, "deadly hunt")
+                val kDramaEditorial = findRowsByKeywords(tabRows, "k-drama")
 
-                val defaultSeriesFilters = listOf(
-                    CatalogFilterOption("Drama", genre = "Drama"),
-                    CatalogFilterOption("Action", genre = "Action"),
-                    CatalogFilterOption("Comedy", genre = "Comedy"),
-                    CatalogFilterOption("Sci-Fi", genre = "Sci-Fi"),
-                    CatalogFilterOption("Crime", genre = "Crime"),
-                    CatalogFilterOption("Animation", genre = "Animation"),
-                    CatalogFilterOption("Thriller", genre = "Thriller"),
-                )
+                fun seriesRow(
+                    title: String,
+                    subtitle: String,
+                    pool: List<MediaItem>,
+                    genre: String = "All",
+                    country: String = "All",
+                    sort: String = "Hottest",
+                    minRating: Double = 5.0,
+                ): CatalogRow? {
+                    val cleaned = pool.cleanHomeQuality(filterAdult, minRating = minRating)
+                        .ifEmpty { pool.cleanPlayable(filterAdult) }
+                    if (cleaned.size < 3) return null
+                    return CatalogRow(
+                        category = title,
+                        items = cleaned,
+                        expandQuery = CategoryQuery(
+                            title = title,
+                            subtitle = subtitle,
+                            channelId = 2,
+                            genre = genre,
+                            country = country,
+                            sort = sort,
+                            minRating = minRating,
+                            seedItems = cleaned.take(12),
+                        ),
+                    )
+                }
 
-                val featured = (rankSeries + hottestSeries)
+                val rows = listOfNotNull(
+                    seriesRow(
+                        title = "All-Time Great Series",
+                        subtitle = "Essential series with top IMDb scores",
+                        pool = allTime + rankSeries,
+                        sort = "Hottest",
+                        minRating = 6.5,
+                    ),
+                    seriesRow(
+                        title = "Trending & Returning",
+                        subtitle = "New seasons and fresh releases",
+                        pool = hotReturning + latest,
+                        sort = "Latest",
+                        minRating = 5.2,
+                    ),
+                    seriesRow(
+                        title = "Crime & Action Thrillers",
+                        subtitle = "Espionage, detectives & edge-of-seat action",
+                        pool = deadlyHunt + crime,
+                        genre = "Crime",
+                        minRating = 5.5,
+                    ),
+                    seriesRow(
+                        title = "K-Drama Essentials",
+                        subtitle = "Top Korean dramas & thrillers",
+                        pool = kDramaEditorial + korea,
+                        country = "Korea",
+                        minRating = 5.5,
+                    ),
+                    seriesRow(
+                        title = "Sci-Fi & Mystery",
+                        subtitle = "Futuristic worlds & mind-bending mysteries",
+                        pool = sciFi,
+                        genre = "Sci-Fi",
+                        minRating = 5.2,
+                    ),
+                    seriesRow(
+                        title = "Acclaimed Dramas",
+                        subtitle = "Prestige character-driven series",
+                        pool = drama,
+                        genre = "Drama",
+                        minRating = 5.5,
+                    ),
+                    seriesRow(
+                        title = "Anime Series",
+                        subtitle = "Top-rated Japanese anime",
+                        pool = anime,
+                        genre = "Anime",
+                        minRating = 5.5,
+                    ),
+                    seriesRow(
+                        title = "Comedy Series",
+                        subtitle = "Sitcoms & witty comedy series",
+                        pool = comedy,
+                        genre = "Comedy",
+                        minRating = 5.0,
+                    ),
+                ).distinctBy { it.category.lowercase() }
+
+                val featured = (rankSeries + allTime)
+                    .cleanHomeQuality(filterAdult, minRating = 6.5)
                     .distinctBy { it.id }
                     .sortedByDescending { it.rating.toDoubleOrNull() ?: 0.0 }
-                    .take(6)
+                    .take(8)
+                    .ifEmpty { rows.firstOrNull()?.items?.take(6).orEmpty() }
 
                 HomeCatalog(
                     featured = featured,
                     rows = rows,
-                    filters = defaultSeriesFilters,
-                    sourceHost = v3Client.activeBaseUrl,
+                    filters = DEFAULT_SERIES_FILTERS,
+                    sourceHost = seriesTab?.sourceHost?.ifBlank { v3Client.activeBaseUrl }
+                        ?: v3Client.activeBaseUrl,
                 )
             }
+
             ConnectionMode.CUSTOM_BRIDGE -> {
                 val home = bridgeClient.fetchHome(settings.bridgeBaseUrl)
-                filterCatalogByType(home, isSeries = true)
+                filterCatalogByType(home, isSeries = true, filterAdult = filterAdult)
             }
         }
 
@@ -347,28 +719,86 @@ class MediaRepository(
         return result
     }
 
+    suspend fun fetchCategoryPage(
+        settings: AppSettings,
+        query: CategoryQuery,
+        sortOverride: String = query.sort,
+        yearOverride: String = query.year,
+        countryOverride: String = query.country,
+        page: Int = 1,
+    ): FilteredCatalogPage {
+        val pageResult = fetchFilteredCatalog(
+            settings = settings,
+            channelId = query.channelId,
+            genre = query.genre.takeUnless { it.equals("All", ignoreCase = true) },
+            year = yearOverride.takeUnless { it.equals("All", ignoreCase = true) },
+            country = countryOverride.takeUnless { it.equals("All", ignoreCase = true) },
+            sort = sortOverride,
+            page = page,
+            perPage = 20,
+        )
+
+        val qualityFiltered = if (query.minRating > 0.0) {
+            val highRated = pageResult.items.filter {
+                (it.rating.toDoubleOrNull() ?: 0.0) >= query.minRating
+            }
+            if (highRated.size >= 4 || (yearOverride == "All" && countryOverride == "All")) {
+                highRated.ifEmpty { pageResult.items }
+            } else {
+                pageResult.items
+            }
+        } else {
+            pageResult.items
+        }
+
+        val isDefaultUnfilteredPage1 = page == 1 &&
+            sortOverride == query.sort &&
+            yearOverride == query.year &&
+            countryOverride == query.country &&
+            query.seedItems.isNotEmpty()
+
+        val mergedItems = if (isDefaultUnfilteredPage1) {
+            val safeSeeds = query.seedItems.cleanPlayable(settings.adultFilterEnabled)
+            val combined = if (sortOverride.equals("TopRated", ignoreCase = true)) {
+                sortByImdbDesc((safeSeeds + qualityFiltered).distinctBy { it.id })
+            } else {
+                (safeSeeds + qualityFiltered).distinctBy { it.id }
+            }
+            combined
+        } else {
+            qualityFiltered
+        }
+
+        return pageResult.copy(items = mergedItems)
+    }
+
     suspend fun fetchSimilarItems(
         settings: AppSettings,
         anchor: MediaItem,
     ): List<MediaItem> {
         syncClientConfig(settings)
         if (settings.connectionMode != ConnectionMode.STANDALONE_V3) return emptyList()
+        val filterAdult = settings.adultFilterEnabled
         val primaryGenre = anchor.genre
             .split(',', '/', '|')
             .map { it.trim() }
-            .firstOrNull { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
+            .firstOrNull {
+                it.isNotBlank() &&
+                    !it.equals("All", ignoreCase = true) &&
+                    ContentFilter.isSafeSearchTerm(it, filterAdult)
+            }
         val channelId = if (anchor.isSeries) 2 else 1
-        val cacheKey = "sim_${settings.language.code}_${channelId}_${primaryGenre ?: "hottest"}"
+        val cacheKey = "sim_${settings.language.code}_${channelId}_${primaryGenre ?: "hottest"}_af$filterAdult"
 
-        val pool = getFresh(similarCache, cacheKey) ?: runCatching {
+        val pool = getFresh(similarCache, cacheKey) ?: safeCall {
             v3Client.fetchFilteredList(
                 channelId = channelId,
                 genre = primaryGenre,
                 sort = "Hottest",
                 page = 1,
-                perPage = 16,
-            ).items.cleanPlayable()
-        }.getOrDefault(emptyList()).also { list ->
+                perPage = 18,
+            ).items.cleanPlayable(filterAdult)
+        }.orEmpty().also { list ->
             if (list.isNotEmpty()) putFresh(similarCache, cacheKey, list)
         }
 
@@ -380,18 +810,24 @@ class MediaRepository(
         forceRefresh: Boolean = false,
     ): TrendingSearchRank {
         syncClientConfig(settings)
-        val cacheKey = "trend_${settings.connectionMode.id}_${settings.language.code}"
+        val filterAdult = settings.adultFilterEnabled
+        val cacheKey = "trend_${settings.connectionMode.id}_${settings.language.code}_af$filterAdult"
         if (!forceRefresh) {
             getFresh(trendingCache, cacheKey)?.let { return it }
         }
-        val rank = when (settings.connectionMode) {
+        val raw = when (settings.connectionMode) {
             ConnectionMode.STANDALONE_V3 -> v3Client.fetchSearchRank()
             ConnectionMode.CUSTOM_BRIDGE -> TrendingSearchRank()
         }
-        if (rank.movies.isNotEmpty() || rank.series.isNotEmpty()) {
-            putFresh(trendingCache, cacheKey, rank)
+        val cleaned = TrendingSearchRank(
+            movies = raw.movies.cleanPlayable(filterAdult),
+            series = raw.series.cleanPlayable(filterAdult),
+            everyoneSearch = raw.everyoneSearch.filter { ContentFilter.isSafeSearchTerm(it, filterAdult) },
+        )
+        if (cleaned.movies.isNotEmpty() || cleaned.series.isNotEmpty()) {
+            putFresh(trendingCache, cacheKey, cleaned)
         }
-        return rank
+        return cleaned
     }
 
     suspend fun fetchFilteredCatalog(
@@ -405,26 +841,38 @@ class MediaRepository(
         perPage: Int = 20,
     ): FilteredCatalogPage {
         syncClientConfig(settings)
-        return when (settings.connectionMode) {
-            ConnectionMode.STANDALONE_V3 -> v3Client.fetchFilteredList(
-                channelId = channelId,
-                genre = genre,
-                year = year,
-                country = country,
-                sort = sort,
-                page = page,
-                perPage = perPage,
-            )
-            ConnectionMode.CUSTOM_BRIDGE -> FilteredCatalogPage(emptyList(), page = 1, hasMore = false, totalCount = 0)
+        if (settings.connectionMode == ConnectionMode.CUSTOM_BRIDGE) {
+            return FilteredCatalogPage(emptyList(), page = 1, hasMore = false, totalCount = 0)
         }
+        val apiSort = if (sort.equals("TopRated", ignoreCase = true)) "Hottest" else sort
+        val rawPage = v3Client.fetchFilteredList(
+            channelId = channelId,
+            genre = genre,
+            year = year,
+            country = country,
+            sort = apiSort,
+            page = page,
+            perPage = perPage,
+        )
+        val safeItems = rawPage.items.cleanPlayable(settings.adultFilterEnabled)
+        val orderedItems = if (sort.equals("TopRated", ignoreCase = true)) {
+            sortByImdbDesc(safeItems)
+        } else {
+            safeItems
+        }
+        return rawPage.copy(items = orderedItems)
     }
 
-    private fun filterCatalogByType(catalog: HomeCatalog, isSeries: Boolean): HomeCatalog {
+    private fun filterCatalogByType(
+        catalog: HomeCatalog,
+        isSeries: Boolean,
+        filterAdult: Boolean,
+    ): HomeCatalog {
         val filteredRows = catalog.rows.mapNotNull { row ->
-            val matching = row.items.filter { it.isSeries == isSeries }
-            if (matching.isNotEmpty()) CatalogRow(row.category, matching) else null
+            val matching = row.items.cleanPlayable(filterAdult).filter { it.isSeries == isSeries }
+            if (matching.isNotEmpty()) row.copy(items = matching) else null
         }
-        val filteredFeatured = catalog.featured.filter { it.isSeries == isSeries }
+        val filteredFeatured = catalog.featured.cleanPlayable(filterAdult).filter { it.isSeries == isSeries }
             .ifEmpty { filteredRows.firstOrNull()?.items?.take(5).orEmpty() }
         return HomeCatalog(
             featured = filteredFeatured,
@@ -441,7 +889,7 @@ class MediaRepository(
         perPage: Int = 20,
     ): List<MediaItem> {
         syncClientConfig(settings)
-        return when (settings.connectionMode) {
+        val raw = when (settings.connectionMode) {
             ConnectionMode.STANDALONE_V3 -> v3Client.search(query = query, subjectType = subjectType, perPage = perPage)
             ConnectionMode.CUSTOM_BRIDGE -> {
                 val all = bridgeClient.search(settings.bridgeBaseUrl, query)
@@ -449,6 +897,9 @@ class MediaRepository(
                 filtered.take(perPage)
             }
         }
+        return ContentFilter.filterSafeList(raw, settings.adultFilterEnabled)
+            .filter { it.id.isNotBlank() && it.title.isNotBlank() && it.posterUrl.isNotBlank() }
+            .distinctBy { it.id }
     }
 
     suspend fun fetchDetails(
@@ -504,7 +955,6 @@ class MediaRepository(
             )
         }
 
-        // Ensure we know available dubs so both preferred audio language & in-player audio switcher work
         val knownDubs = if (dubsMeta.isNotEmpty()) {
             dubsMeta
         } else {
@@ -512,12 +962,10 @@ class MediaRepository(
             if (cached != null && cached.dubs.isNotEmpty()) {
                 cached.dubs
             } else {
-                runCatching { v3Client.fetchItemDetails(item.id, includeSeasons = false).dubs }
-                    .getOrDefault(emptyList())
+                safeCall { v3Client.fetchItemDetails(item.id, includeSeasons = false).dubs }.orEmpty()
             }
         }
 
-        // Resolve target subjectId: explicit dub pick > user's PreferredAudioLanguage > item.id
         val preferredDub = if (explicitDubSubjectId != null) {
             knownDubs.firstOrNull { it.subjectId == explicitDubSubjectId }
         } else {
@@ -530,9 +978,8 @@ class MediaRepository(
             ?: preferredDub?.languageName
             ?: "Original Audio"
 
-        // If we switched to a different dub subjectId for a TV series, refresh seasons if needed
         val effectiveSeasons = if (item.isSeries && activeSubjectId != item.id) {
-            runCatching { v3Client.fetchSeasons(activeSubjectId) }.getOrDefault(seasonsMeta)
+            safeCall { v3Client.fetchSeasons(activeSubjectId) } ?: seasonsMeta
         } else {
             seasonsMeta
         }
@@ -553,16 +1000,15 @@ class MediaRepository(
 
         val queryRes = targetResolution.coerceAtMost(1080).takeIf { it > 0 } ?: 1080
         var resolvedSubjectId = activeSubjectId
-        var firstResult = runCatching {
+        var firstResult = safeCall {
             v3Client.fetchResources(
                 subjectId = activeSubjectId,
                 resolution = queryRes,
                 page = initialPage,
                 perPage = 20,
             )
-        }.getOrNull()
+        }
 
-        // Fallback gracefully to original item.id if the preferred dub had no streams for this episode
         if ((firstResult == null || firstResult.streams.isEmpty()) && activeSubjectId != item.id) {
             resolvedSubjectId = item.id
             firstResult = v3Client.fetchResources(
@@ -596,18 +1042,17 @@ class MediaRepository(
             }
         }
 
-        // Probe extra resolutions concurrently for faster playback start
         if (resolutionsToProbe.isNotEmpty()) {
             val extraDeferreds = resolutionsToProbe.take(2).map { extraRes ->
                 async {
-                    runCatching {
+                    safeCall {
                         v3Client.fetchResources(
                             subjectId = resolvedSubjectId,
                             resolution = extraRes,
                             page = initialPage,
                             perPage = 20,
                         ).streams
-                    }.getOrDefault(emptyList())
+                    }.orEmpty()
                 }
             }
             extraDeferreds.forEach { collectedStreams.addAll(it.await()) }
@@ -619,14 +1064,14 @@ class MediaRepository(
                 var nextPage = safeFirst.nextPage
                 var guard = 0
                 while (guard < 4) {
-                    val pageRes = runCatching {
+                    val pageRes = safeCall {
                         v3Client.fetchResources(
                             subjectId = resolvedSubjectId,
                             resolution = queryRes,
                             page = nextPage,
                             perPage = 20,
                         )
-                    }.getOrNull() ?: break
+                    } ?: break
                     collectedStreams.addAll(pageRes.streams)
                     if (pageRes.streams.any { it.season == targetSeason && it.episode == targetEpisode } || !pageRes.hasMore) {
                         break
@@ -655,9 +1100,9 @@ class MediaRepository(
             preferredCodec = settings.preferredCodec,
         )
 
-        val subtitles = runCatching {
+        val subtitles = safeCall {
             v3Client.fetchCaptions(resolvedSubjectId, bestStream.resourceId)
-        }.getOrDefault(emptyList())
+        }.orEmpty()
 
         val sortedQualities = episodeCandidates
             .sortedWith(
@@ -693,6 +1138,41 @@ class MediaRepository(
     companion object {
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
 
+        private val DEFAULT_MOVIE_FILTERS = listOf(
+            "Action",
+            "Sci-Fi",
+            "Thriller",
+            "Crime",
+            "Comedy",
+            "Drama",
+            "Horror",
+            "Animation",
+            "Anime",
+            "Adventure",
+            "Mystery",
+            "Family",
+            "History",
+            "War",
+            "Biography",
+            "Documentary",
+        ).map { CatalogFilterOption(label = it, genre = it) }
+
+        private val DEFAULT_SERIES_FILTERS = listOf(
+            "Drama",
+            "Crime",
+            "Action",
+            "Sci-Fi",
+            "Thriller",
+            "Comedy",
+            "Mystery",
+            "Anime",
+            "Animation",
+            "Adventure",
+            "Family",
+            "History",
+            "Documentary",
+        ).map { CatalogFilterOption(label = it, genre = it) }
+
         fun findMatchingDub(
             dubs: List<DubOption>,
             preferred: PreferredAudioLanguage,
@@ -715,6 +1195,7 @@ class MediaRepository(
                     (code == "pt" && dn.contains("portug"))
             }
         }
+
         fun computeEpisodePage(
             seasons: List<SeasonInfo>,
             seasonNumber: Int,
@@ -735,16 +1216,13 @@ class MediaRepository(
         ): StreamResource {
             return candidates.maxWith(
                 compareBy<StreamResource>(
-                    // 1. Prefer closest resolution to requested quality (or highest if Auto Best)
                     { stream ->
                         if (targetResolution >= 2160) {
                             stream.resolution
                         } else {
-                            // Exact match highest, otherwise closest below/above
                             10_000 - abs(stream.resolution - targetResolution)
                         }
                     },
-                    // 2. Apply codec preference
                     { stream ->
                         val codec = stream.codec.lowercase()
                         when (preferredCodec) {
@@ -753,7 +1231,6 @@ class MediaRepository(
                             PreferredCodec.AUTO_HARDWARE -> if (codec == "h264" || codec == "avc") 1 else 0
                         }
                     },
-                    // 3. Higher resolution tie-breaker
                     { it.resolution },
                 ),
             )

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,13 +98,17 @@ fun DetailScreen(
             .background(CanvasBlack),
     ) {
         // Full-bleed widescreen backdrop melting into CanvasBlack (lean 640x360 for low-RAM TVs)
+        val context = LocalContext.current
         if (item.effectiveBackdropUrl.isNotBlank()) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
+            val backdropRequest = remember(item.effectiveBackdropUrl) {
+                ImageRequest.Builder(context)
                     .data(item.effectiveBackdropUrl)
                     .size(640, 360)
                     .crossfade(false)
-                    .build(),
+                    .build()
+            }
+            AsyncImage(
+                model = backdropRequest,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
                 alpha = 0.45f,
@@ -196,12 +201,15 @@ fun DetailScreen(
                             .background(SurfaceTonal),
                     ) {
                         if (item.posterUrl.isNotBlank()) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
+                            val posterRequest = remember(item.posterUrl) {
+                                ImageRequest.Builder(context)
                                     .data(item.posterUrl)
                                     .size(220, 330)
                                     .crossfade(false)
-                                    .build(),
+                                    .build()
+                            }
+                            AsyncImage(
+                                model = posterRequest,
                                 contentDescription = item.title,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize(),
@@ -279,20 +287,20 @@ fun DetailScreen(
                         val hasResume = progress != null && progress.positionMs > 5_000L
                         val nextUnwatched = findNextUnwatchedEpisode(item.id, seasons, episodeProgress)
                         val playSeason = when {
-                            hasResume && item.isSeries && progress != null -> progress.season
+                            progress != null && progress.positionMs > 5_000L && item.isSeries -> progress.season
                             item.isSeries && nextUnwatched != null -> nextUnwatched.first
                             item.isSeries -> activeSeasonInfo?.seasonNumber ?: 1
                             else -> 0
                         }
                         val playEp = when {
-                            hasResume && item.isSeries && progress != null -> progress.episode
+                            progress != null && progress.positionMs > 5_000L && item.isSeries -> progress.episode
                             item.isSeries && nextUnwatched != null -> nextUnwatched.second
                             item.isSeries -> 1
                             else -> 0
                         }
                         val primaryLabel = when {
-                            hasResume && item.isSeries && progress != null -> "Resume S${progress.season} E${progress.episode}"
-                            hasResume && progress != null -> "Resume · ${formatShortDuration(progress.positionMs)}"
+                            progress != null && progress.positionMs > 5_000L && item.isSeries -> "Resume S${progress.season} E${progress.episode}"
+                            progress != null && progress.positionMs > 5_000L -> "Resume · ${formatShortDuration(progress.positionMs)}"
                             item.isSeries -> "Play S$playSeason E$playEp"
                             else -> "Play"
                         }
@@ -439,9 +447,10 @@ fun DetailScreen(
             }
 
             // Enhanced Seasons & Episodes Section (with per-episode watched checks & Signal Red progress bars)
-            if (seasons.isNotEmpty() && activeSeasonInfo != null) {
+            if (seasons.isNotEmpty() && activeSeasonInfo != null && activeSeasonInfo.episodeCount > 0) {
                 item(key = "detail_seasons") {
-                    val watchedInSeason = (1..activeSeasonInfo.episodeCount).count { ep ->
+                    val safeEpisodeCount = activeSeasonInfo.episodeCount.coerceIn(1, 500)
+                    val watchedInSeason = (1..safeEpisodeCount).count { ep ->
                         episodeProgress[AppPreferences.episodeKey(item.id, activeSeasonInfo.seasonNumber, ep)]?.isWatched == true
                     }
 
@@ -490,7 +499,7 @@ fun DetailScreen(
                             }
 
                             Text(
-                                text = "$watchedInSeason / ${activeSeasonInfo.episodeCount} WATCHED",
+                                text = "$watchedInSeason / $safeEpisodeCount WATCHED",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = InkMuted,
                             )
@@ -504,7 +513,7 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             contentPadding = PaddingValues(horizontal = 36.dp, vertical = 12.dp),
                         ) {
-                            itemsIndexed((1..activeSeasonInfo.episodeCount).toList(), key = { idx, ep -> "s${activeSeasonInfo.seasonNumber}_e${idx}_$ep" }) { _, epNum ->
+                            itemsIndexed((1..safeEpisodeCount).toList(), key = { idx, ep -> "s${activeSeasonInfo.seasonNumber}_e${idx}_$ep" }) { _, epNum ->
                                 val epProg = episodeProgress[AppPreferences.episodeKey(item.id, activeSeasonInfo.seasonNumber, epNum)]
                                 val isWatched = epProg?.isWatched == true
                                 val frac = epProg?.progressFraction ?: 0f
@@ -623,12 +632,15 @@ fun DetailScreen(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         if (member.avatarUrl.isNotBlank()) {
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(LocalContext.current)
+                                            val avatarRequest = remember(member.avatarUrl) {
+                                                ImageRequest.Builder(context)
                                                     .data(member.avatarUrl)
                                                     .size(96, 96)
                                                     .crossfade(false)
-                                                    .build(),
+                                                    .build()
+                                            }
+                                            AsyncImage(
+                                                model = avatarRequest,
                                                 contentDescription = member.name,
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier.fillMaxSize(),

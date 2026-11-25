@@ -6,6 +6,7 @@ import com.example.arialtv.data.model.ConnectionMode
 import com.example.arialtv.data.model.MediaItem
 import com.example.arialtv.data.moviebox.MovieBoxConfig
 import com.example.arialtv.data.moviebox.MovieBoxV3Client
+import com.example.arialtv.data.repository.ContentFilter
 import com.example.arialtv.data.repository.MediaRepository
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
@@ -145,6 +146,98 @@ class MovieBoxLiveIntegrationTest {
         assertEquals("DOC", MediaItem(id = "3", title = "C", subjectType = 1, genre = "Documentary").contentTypeBadge)
         assertEquals("MUSIC", MediaItem(id = "4", title = "D", subjectType = 6, genre = "Pop").contentTypeBadge)
         assertEquals("MUSIC", MediaItem(id = "5", title = "E", subjectType = 1, genre = "Music, Concert").contentTypeBadge)
+    }
+
+    @Test
+    fun homeCatalogIsCleanQualityAndExpandableLive() = runTest {
+        val repository = MediaRepository()
+        val settings = AppSettings(
+            connectionMode = ConnectionMode.STANDALONE_V3,
+            language = CatalogLanguage.ENGLISH,
+            adultFilterEnabled = true,
+        )
+
+        val home = repository.fetchHome(settings, forceRefresh = true)
+        assertTrue("Expected curated Home rows", home.rows.size >= 5)
+
+        home.rows.forEach { row ->
+            assertNotNull("Expected expandQuery for Home category '${row.category}'", row.expandQuery)
+            row.items.forEach { item ->
+                assertTrue(
+                    "Home leaked unsafe item '${item.title}' (${item.genre}) in '${row.category}'",
+                    ContentFilter.isSafeContent(item, filterEnabled = true),
+                )
+                assertTrue(
+                    "Home leaked low-quality/unrated item '${item.title}' (rating=${item.rating}, year=${item.year}, type=${item.subjectType})",
+                    ContentFilter.isQualityHomeItem(item, filterEnabled = true, minRating = 4.5),
+                )
+            }
+        }
+
+        val expandQuery = home.rows.first().expandQuery!!
+        val expandedPage = repository.fetchCategoryPage(settings, expandQuery, page = 1)
+        assertTrue("Expected expanded category items", expandedPage.items.isNotEmpty())
+        expandedPage.items.forEach { item ->
+            assertTrue(
+                "Expanded category leaked unsafe item '${item.title}'",
+                ContentFilter.isSafeContent(item, filterEnabled = true),
+            )
+        }
+    }
+
+    @Test
+    fun multiDimensionalFiltersAndAdultBlockWorkLive() = runTest {
+        val repository = MediaRepository()
+        val settings = AppSettings(
+            connectionMode = ConnectionMode.STANDALONE_V3,
+            language = CatalogLanguage.ENGLISH,
+            adultFilterEnabled = true,
+        )
+
+        val jpMovies = repository.fetchFilteredCatalog(
+            settings = settings,
+            channelId = 1,
+            country = "Japan",
+            sort = "Hottest",
+            page = 1,
+            perPage = 10,
+        )
+        assertTrue("Expected Japanese movies", jpMovies.items.isNotEmpty())
+        jpMovies.items.forEach { assertTrue(ContentFilter.isSafeContent(it, filterEnabled = true)) }
+
+        val krSeries = repository.fetchFilteredCatalog(
+            settings = settings,
+            channelId = 2,
+            country = "Korea",
+            sort = "Hottest",
+            page = 1,
+            perPage = 10,
+        )
+        assertTrue("Expected Korean series", krSeries.items.isNotEmpty())
+        krSeries.items.forEach { assertTrue(ContentFilter.isSafeContent(it, filterEnabled = true)) }
+
+        val docs = repository.fetchFilteredCatalog(
+            settings = settings,
+            channelId = 1,
+            genre = "Documentary",
+            sort = "Hottest",
+            page = 1,
+            perPage = 12,
+        )
+        docs.items.forEach { item ->
+            assertTrue(
+                "Documentary filter leaked explicit title '${item.title}'",
+                ContentFilter.isSafeContent(item, filterEnabled = true),
+            )
+        }
+
+        val eroticSearchResults = repository.search(settings, "erotic")
+        eroticSearchResults.forEach { item ->
+            assertTrue(
+                "Search leaked unsafe item '${item.title}' (${item.genre})",
+                ContentFilter.isSafeContent(item, filterEnabled = true),
+            )
+        }
     }
 
     private fun assertCdnRange206(streamUrl: String) {

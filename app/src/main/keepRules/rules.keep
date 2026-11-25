@@ -1,13 +1,18 @@
 # Project R8 keep rules for Arial TV (Jetpack Compose + Media3 + Jellyfin FFmpeg + OkHttp + Coil)
 
-# Keep Media3 FFmpeg extension decoder (instantiated via reflection by DefaultRenderersFactory)
--keep class androidx.media3.decoder.ffmpeg.** { *; }
--dontwarn androidx.media3.decoder.ffmpeg.**
-
-# Keep Media3 reflection-loaded renderers, extractors, and data sources
+# Keep Media3 reflection-loaded renderers, FFmpeg extension decoders, extractors, UI, and data sources
+-keep class androidx.media3.decoder.** { *; }
 -keep class androidx.media3.exoplayer.** { *; }
+-keep class androidx.media3.extractor.** { *; }
+-keep class androidx.media3.common.** { *; }
+-keep class androidx.media3.ui.** { *; }
+-keep class androidx.media3.container.** { *; }
 -keep class androidx.media3.datasource.okhttp.** { *; }
 -dontwarn androidx.media3.**
+
+# Keep FileProvider (manifest-instantiated) and data models
+-keep class androidx.core.content.FileProvider { *; }
+-keep class com.example.arialtv.data.model.** { *; }
 
 # Keep OkHttp / Okio internal platform helpers
 -dontwarn okhttp3.**
